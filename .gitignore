@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# API Keys & Secrets - NEVER COMMIT!
+.env
+*.env
+.env.local
+.env.production
+api_keys.txt
+secrets.py
+
+# Large Data Files
+*.csv
+data/train/*.csv
+data/test/*.csv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+logs/
+*.log
+
+# Vector DB
+*.index
+*.pkl
+vector_db/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
