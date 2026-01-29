@@ -18,6 +18,7 @@ build/
 .env.production
 api_keys.txt
 secrets.py
+.claude
 
 # Large Data Files
 *.csv

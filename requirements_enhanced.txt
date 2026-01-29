@@ -1,0 +1,46 @@
+# SCM Chatbot Enhanced - Requirements
+# Version 2.0
+
+# Core Dependencies (Required)
+pandas>=2.0.0
+numpy>=1.24.0
+scikit-learn>=1.3.0
+gradio>=4.0.0
+python-dateutil>=2.8.2
+python-dotenv>=1.0.0
+
+# LLM Integration (Optional - for Enhanced AI)
+groq>=0.4.0
+
+# RAG/Semantic Search (Optional - for RAG features)
+sentence-transformers>=2.2.0
+faiss-cpu>=1.7.4
+torch>=2.0.0
+
+# Note: logging, pathlib, and pickle are built-in Python modules
+# and do not need to be installed separately
+
+# Development (Optional)
+pytest>=7.4.0
+black>=23.0.0
+flake8>=6.0.0
+
+# Notes:
+# - Install core dependencies for basic functionality
+# - Add groq for AI-powered natural language features
+# - Add RAG dependencies for semantic search capabilities
+# - RAG features require ~2GB additional memory
+
+# Installation Commands:
+# ------------------
+# Core only (rule-based chatbot):
+#   pip install pandas numpy scikit-learn gradio python-dateutil
+#
+# With AI features:
+#   pip install pandas numpy scikit-learn gradio groq
+#
+# Full featured (AI + RAG):
+#   pip install -r requirements_enhanced.txt
+#
+# Minimal (legacy mode):
+#   pip install pandas numpy gradio

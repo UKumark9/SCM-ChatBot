@@ -1,0 +1,57 @@
+RAG AUTO-ENABLE FIX
+===================
+
+ISSUE: RAG was showing as "False" even though code was supposed to enable it by default.
+
+ROOT CAUSE: The argparse flag --rag had default=False, which was overriding the __init__ default.
+
+FILE MODIFIED: main.py (lines 1104-1107)
+
+CHANGES:
+--------
+BEFORE:
+    parser.add_argument('--rag', action='store_true', default=False,
+                       help='Enable RAG ...')
+
+AFTER:
+    parser.add_argument('--rag', action='store_true', default=True,
+                       help='Enable RAG ... (default: True)')
+    parser.add_argument('--no-rag', dest='rag', action='store_false',
+                       help='Disable RAG and use analytics only')
+
+HOW TO USE NOW:
+---------------
+
+1. START WITH RAG ENABLED (default):
+   python main.py
+
+   Expected logs:
+   - "Initializing SCM Chatbot (Enhanced: True, RAG: True, ...)"
+   - "🔄 Attempting to initialize RAG module..."
+   - "✅ RAG module initialized successfully"
+   - "Delay Agent initialized (LangChain: False, RAG: True)"
+
+2. START WITHOUT RAG (if you want to disable it):
+   python main.py --no-rag
+
+   Expected logs:
+   - "Initializing SCM Chatbot (Enhanced: True, RAG: False, ...)"
+   - "RAG module disabled by configuration"
+
+VERIFICATION:
+-------------
+After restarting, look for this line in the logs:
+
+  INFO - Delay Agent initialized (LangChain: False, RAG: True)
+                                                         ^^^^
+If it says "RAG: True", then RAG is enabled!
+
+RESTART REQUIRED:
+-----------------
+You must RESTART the application for changes to take effect:
+1. Stop current session (Ctrl+C)
+2. Run: python main.py
+3. Check logs for "RAG: True"
+
+Date: 2026-01-30
+Status: FIXED ✅

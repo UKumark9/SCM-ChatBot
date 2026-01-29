@@ -1,324 +1,294 @@
-# 🤖 SCM Intelligent Chatbot
+# 🤖 SCM Chatbot - Multi-Agent Supply Chain Management Assistant
 
-**AI-Powered Supply Chain Management Assistant**
+An intelligent chatbot for supply chain management analysis with **dual-mode architecture**: Multi-Agent (Agentic) and Single-LLM (Enhanced) execution modes.
 
-[![Python](https://img.shields.io/badge/Python-3.8%2B-blue)](https://www.python.org/)
-[![LangChain](https://img.shields.io/badge/LangChain-0.1%2B-green)](https://langchain.com/)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+## ✨ Features
 
----
+### 🤖 **Multi-Agent Mode (Agentic)**
+- **4 Specialized Agents** using LangChain framework
+  - 🚚 **Delay Agent** - Delivery performance analysis
+  - 💰 **Analytics Agent** - Revenue, products, customers
+  - 📈 **Forecasting Agent** - Demand predictions
+  - 📊 **Data Query Agent** - Raw data access
+- Intelligent query routing via **Agent Orchestrator**
+- Tool calling and agentic workflows
 
-## 🌟 Overview
+### ✨ **Enhanced Mode (Single LLM)**
+- Direct Groq API integration with Llama 3.3 70B
+- Adaptive response complexity (simple/moderate/complex)
+- Context-aware natural language understanding
+- Faster responses, lower API costs
 
-An intelligent conversational AI system that provides real-time analytics, forecasting, and decision support for supply chain operations. Built with LangChain, LLaMA 3, and advanced RAG (Retrieval-Augmented Generation) technology.
+### 📊 **Legacy Mode (Rule-Based)**
+- Pattern matching with keyword detection
+- No LLM required (works offline)
+- Fast analytics queries
 
-### ✨ Key Features
-
-- 💬 **Natural Language Interface**: Ask questions in plain English
-- 📊 **Real-time Analytics**: Delivery delays, revenue trends, product performance
-- 🔮 **Demand Forecasting**: ML-powered predictions with accuracy metrics
-- 🗄️ **RAG System**: Context-aware responses using vector databases
-- 📦 **Inventory Management**: Risk assessment and stock monitoring
-- 🏭 **Supplier Evaluation**: Performance tracking and quality metrics
-- 🎨 **Modern UI**: Beautiful Gradio interface with examples
-
----
+### 🎨 **Dynamic UI with Mode Switching**
+- Gradio web interface at http://localhost:7860
+- Switch between all 3 modes during conversation
+- Compare responses across different execution strategies
+- Agent name display with execution metadata
 
 ## 🚀 Quick Start
 
+### Prerequisites
+
+- Python 3.8 or higher
+- Groq API key (get from https://console.groq.com/)
+
 ### Installation
 
-```bash
-# 1. Clone the repository
-cd scm_chatbot
+1. **Clone or download** the project
 
-# 2. Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+2. **Install dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-# 3. Install dependencies
-pip install -r requirements.txt
+3. **Set up API key**:
+   Create a `.env` file in the project root:
+   ```
+   GROQ_API_KEY=your_groq_api_key_here
+   ```
 
-# 4. Set up environment variables
-export GROQ_API_KEY="your_groq_api_key_here"
+4. **Run the application**:
+   ```bash
+   python main.py
+   ```
 
-# 5. Prepare your data
-# Copy CSV files to data/train/ directory:
-# - df_Customers.csv
-# - df_Orders.csv
-# - df_OrderItems.csv
-# - df_Payments.csv
-# - df_Products.csv
+   **OR** for Windows, double-click: `START_HERE.bat`
 
-# 6. Run the application
-python main.py --mode ui
+5. **Open your browser** to http://localhost:7860
+
+## 📖 Usage
+
+### Mode Selection
+
+In the web UI, use the **Mode Selector** on the right:
+
+- **🤖 Agentic (Multi-Agent)** - Specialized agents with intelligent routing
+- **✨ Enhanced (Single LLM)** - Adaptive single-model responses
+- **📊 Legacy (Rule-Based)** - Fast keyword-based queries
+
+### Example Queries
+
+**Delivery Analysis:**
 ```
-
-### First Query
-
-Open your browser to `http://localhost:7860` and try:
-
-```
-"What is the current delivery delay rate?"
-```
-
----
-
-## 📋 What Can You Ask?
-
-### Delivery & Performance
 - "What is the delivery delay rate?"
 - "Which states have the most delays?"
-- "Show me on-time delivery performance"
+- "Show on-time delivery performance"
+```
 
-### Revenue & Sales
+**Revenue & Sales:**
+```
+- "Show revenue analysis"
 - "What are the revenue trends?"
-- "Show me monthly revenue growth"
-- "Which state generates the most revenue?"
-
-### Products
-- "Which products are selling best?"
-- "Analyze product performance by category"
-- "What is the average product price?"
-
-### Customers
-- "Analyze customer behavior patterns"
-- "What is the repeat customer rate?"
-- "Show customer lifetime value"
-
-### Forecasting
-- "Forecast demand for the next 30 days"
-- "Predict future sales trends"
-- "What will be the demand next week?"
-
-### Inventory
-- "What are the current inventory risks?"
-- "Which products are low in stock?"
-- "Show warehouse distribution"
-
-### Suppliers
-- "Evaluate supplier performance"
-- "Which suppliers have the best on-time delivery?"
-- "Show supplier quality ratings"
-
-### Reports
-- "Generate a comprehensive report"
-- "Give me a complete overview"
-
----
-
-## 🏗️ Architecture
-
-```
-User Interface (Gradio/CLI)
-           ↓
-   Agent Orchestrator
-    ↙    ↓    ↘
-Tools  Analytics  RAG
-    ↘    ↓    ↙
-   Data Processing
-           ↓
-  Vector Database + CSV Data
+- "Compare revenue by region"
 ```
 
-### Core Components
+**Forecasting:**
+```
+- "Forecast demand for 30 days"
+- "What are the demand trends?"
+- "Predict next month's orders"
+```
 
-1. **LangChain Agent Orchestrator**: Routes queries to specialized tools
-2. **Analytics Engine**: Performs data analysis and forecasting
-3. **RAG Module**: Retrieval-Augmented Generation for context
-4. **Vector Database (FAISS)**: Semantic search over supply chain data
-5. **LLM (LLaMA 3 70B)**: Natural language understanding via Groq
-
----
+**Comprehensive:**
+```
+- "Generate comprehensive supply chain report"
+- "What insights can you provide about our supply chain?"
+```
 
 ## 📁 Project Structure
 
 ```
 scm_chatbot/
-├── main.py                 # Application entry point
-├── config/
-│   └── config.py          # System configuration
-├── modules/
-│   ├── data_processor.py  # Data loading & preprocessing
-│   ├── analytics.py       # Analytics engine
-│   └── rag.py            # RAG system
-├── agents/
-│   └── orchestrator.py    # LangChain agent
-├── ui/
-│   └── interface.py       # Gradio interface
-├── utils/
-│   └── helpers.py         # Utilities
-├── tests/
-│   └── test_suite.py      # Test cases
-├── data/                  # Your CSV files
-├── docs/
-│   └── DEVELOPER_HANDBOOK.md  # Complete documentation
-└── requirements.txt       # Dependencies
+├── main.py                    # Main application entry point
+├── enhanced_chatbot.py        # Enhanced chatbot with LLM integration
+├── rag.py                     # RAG module for semantic search
+├── requirements.txt           # Python dependencies
+├── START_HERE.bat            # Windows quick-start script
+├── .env                       # Configuration (API keys)
+│
+├── agents/                    # Multi-agent system
+│   ├── __init__.py
+│   ├── delay_agent.py        # Delivery delay specialist
+│   ├── analytics_agent.py    # Revenue & customer specialist
+│   ├── forecasting_agent.py  # Demand prediction specialist
+│   ├── data_query_agent.py   # Raw data query specialist
+│   ├── orchestrator.py       # Central coordinator
+│   └── scm_agent.py          # Legacy agent implementation
+│
+├── data/                      # Data files
+│   └── train/                # Training dataset (CSV files)
+│       ├── df_Customers.csv
+│       ├── df_Orders.csv
+│       ├── df_OrderItems.csv
+│       ├── df_Payments.csv
+│       └── df_Products.csv
+│
+├── tools/                     # Analytics utilities
+│   └── analytics.py          # SCM analytics engine
+│
+├── docs/                      # Documentation
+│   └── guides/
+│       ├── AGENTIC_ARCHITECTURE.md     # Architecture details
+│       ├── USAGE_GUIDE.md              # Complete user guide
+│       ├── IMPLEMENTATION_SUMMARY.md   # Implementation details
+│       └── PROJECT_STRUCTURE.md        # Project organization
+│
+├── scripts/                   # Utility scripts
+│   └── diagnostics/          # Diagnostic tools
+│       ├── check_modes.py
+│       ├── diagnose.py
+│       └── test_architecture.py
+│
+└── archive/                   # Archived files
 ```
 
----
+## 🛠️ Command Line Options
+
+```bash
+# Default: UI mode with all modes enabled
+python main.py
+
+# Specific modes
+python main.py --agentic        # Multi-agent only
+python main.py --enhanced       # Enhanced LLM only
+python main.py --legacy         # Rule-based only
+
+# Additional options
+python main.py --rag            # Enable RAG semantic search
+python main.py --hide-agent     # Hide agent info
+python main.py --mode cli       # Command-line interface
+python main.py --data test      # Use test dataset
+```
 
 ## 🔧 Configuration
 
-Edit `config/config.py` to customize:
+### Environment Variables
 
-```python
-# LLM Settings
-LLM_CONFIG = {
-    "provider": "groq",
-    "model": "llama3-70b-8192",
-    "temperature": 0.1,
-}
+Create `.env` file:
 
-# Analytics Settings
-ANALYTICS_CONFIG = {
-    "delay_threshold_days": 3,
-    "forecast_periods": 30,
-}
+```bash
+# Required for LLM modes (Agentic and Enhanced)
+GROQ_API_KEY=your_groq_api_key_here
 
-# UI Settings
-UI_CONFIG = {
-    "port": 7860,
-    "share": False,
-}
+# Optional
+RAG_ENABLED=false
+LOG_LEVEL=INFO
 ```
 
----
+### Data Files
+
+Place CSV files in `data/train/`:
+- `df_Customers.csv` - Customer information
+- `df_Orders.csv` - Order records
+- `df_OrderItems.csv` - Order line items
+- `df_Payments.csv` - Payment records
+- `df_Products.csv` - Product catalog
+
+## 📊 Mode Comparison
+
+| Feature | Agentic | Enhanced | Legacy |
+|---------|---------|----------|--------|
+| **Response Quality** | Excellent | High | Good |
+| **Speed** | Medium | Fast | Very Fast |
+| **API Calls** | Multiple | Single | None |
+| **Specialization** | High | Medium | Low |
+| **Offline Support** | No | No | Yes |
+| **Cost** | Higher | Medium | Free |
+
+## 🎯 When to Use Each Mode
+
+### Use Agentic Mode When:
+- Need specialized domain expertise
+- Complex multi-domain queries
+- Want comprehensive reports
+- Budget allows for multiple API calls
+
+### Use Enhanced Mode When:
+- Need fast general responses
+- Want adaptive detail levels
+- Simple to moderate queries
+- Limited API budget
+
+### Use Legacy Mode When:
+- No API key available
+- Need offline operation
+- Simple keyword-based queries
+- Very fast responses required
 
 ## 🧪 Testing
 
+Run diagnostics:
 ```bash
-# Run all tests
-python -m pytest tests/test_suite.py -v
-
-# Run with coverage
-python -m pytest tests/test_suite.py --cov=modules --cov-report=html
-
-# View coverage report
-open htmlcov/index.html
+python scripts/diagnostics/check_modes.py
 ```
 
----
-
-## 📊 Performance Metrics
-
-| Metric | Target | Achieved |
-|--------|--------|----------|
-| Response Time | < 2s | ✅ 0.8s avg |
-| Accuracy | > 85% | ✅ 92% |
-| MAPE (Forecast) | < 15% | ✅ 12.3% |
-| Concurrent Users | 15 | ✅ Supported |
-
----
-
-## 🎯 Use Cases
-
-1. **Operations Manager**: Monitor delivery performance in real-time
-2. **Supply Chain Analyst**: Generate forecasts and identify trends
-3. **Inventory Manager**: Track stock levels and prevent stockouts
-4. **Procurement Team**: Evaluate supplier performance
-5. **Executive**: Get comprehensive business insights
-
----
-
-## 🛠️ Development
-
-### Adding New Analytics
-
-1. Add method to `modules/analytics.py`
-2. Create tool in `agents/orchestrator.py`
-3. Update routing logic
-4. Test and document
-
-See `docs/DEVELOPER_HANDBOOK.md` for detailed guide.
-
-### Running in CLI Mode
-
-```bash
-python main.py --mode cli
-```
-
-### Docker Deployment
-
-```bash
-docker build -t scm-chatbot .
-docker run -p 7860:7860 -e GROQ_API_KEY=your_key scm-chatbot
-```
-
----
+This verifies:
+- ✅ All dependencies installed
+- ✅ Data files present
+- ✅ Modes properly initialized
+- ✅ API key configured
 
 ## 📚 Documentation
 
-- **Complete Guide**: [`docs/DEVELOPER_HANDBOOK.md`](docs/DEVELOPER_HANDBOOK.md)
-- **API Reference**: See handbook Section 5
-- **Architecture**: See handbook Section 2
-- **Troubleshooting**: See handbook Section 9
-
----
+- **[Architecture Guide](docs/guides/AGENTIC_ARCHITECTURE.md)** - Complete architecture documentation
+- **[Usage Guide](docs/guides/USAGE_GUIDE.md)** - Detailed user guide with examples
+- **[Implementation Summary](docs/guides/IMPLEMENTATION_SUMMARY.md)** - Technical implementation details
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
-
----
+This is a demonstration project showcasing multi-agent AI architecture for supply chain management.
 
 ## 📝 License
 
-This project is licensed under the MIT License - see LICENSE file for details.
+MIT License - feel free to use and modify for your projects.
 
----
+## 🆘 Troubleshooting
 
-## 🙏 Acknowledgments
+### "Agentic mode not initialized"
+- Ensure all dependencies installed: `pip install -r requirements.txt`
+- Restart the application: `python main.py`
 
-- **LangChain** - Framework for LLM applications
-- **Groq** - Fast LLaMA API inference
-- **FAISS** - Vector similarity search by Facebook Research
-- **Gradio** - Easy ML interfaces by Hugging Face
-- **Kaggle** - Brazilian E-Commerce dataset
+### "GROQ_API_KEY not set"
+- Create `.env` file with your API key
+- Get key from: https://console.groq.com/
 
----
+### "Data loading failed"
+- Check CSV files exist in `data/train/`
+- Verify file names match expected names
+
+### Dependencies not found
+- Install: `pip install -r requirements.txt`
+- Or use: `START_HERE.bat` (Windows)
+
+## 🎉 Features Implemented
+
+- ✅ Multi-agent architecture with LangChain
+- ✅ Dynamic mode switching in UI
+- ✅ Agent name display with metadata
+- ✅ Intelligent query routing
+- ✅ Adaptive response complexity
+- ✅ Comprehensive analytics engine
+- ✅ Demand forecasting
+- ✅ RAG semantic search support
+- ✅ Clean project organization
+- ✅ Complete documentation
 
 ## 📧 Support
 
-- **Issues**: Open an issue on GitHub
-- **Documentation**: Check the Developer Handbook
-- **Email**: support@scmchatbot.com
+For issues or questions:
+1. Check [docs/guides/USAGE_GUIDE.md](docs/guides/USAGE_GUIDE.md)
+2. Run diagnostics: `python scripts/diagnostics/diagnose.py`
+3. Review console logs for error messages
 
 ---
 
-## 🗺️ Roadmap
+**Built with:** Python, LangChain, Groq API, Gradio, Pandas
 
-### Q2 2026
-- [ ] PostgreSQL database support
-- [ ] User authentication UI
-- [ ] PDF/Excel export
-- [ ] Real-time data streaming
+**Model:** Llama 3.3 70B via Groq
 
-### Q3 2026
-- [ ] Multi-language support
-- [ ] Mobile app
-- [ ] Advanced dashboards
-- [ ] ERP integration
-
-### Q4 2026
-- [ ] Fine-tuned domain LLM
-- [ ] Anomaly detection
-- [ ] Automated decision workflows
-
----
-
-## ⭐ Star History
-
-If you find this project useful, please give it a star! ⭐
-
----
-
-**Built with ❤️ for Supply Chain Professionals**
-
-*Version 1.0.0 | January 2026*
+**Last Updated:** January 2026

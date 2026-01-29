@@ -1,0 +1,30 @@
+{
+  "documents": [
+    {
+      "id": "1af077403ed9e6b43a1107b1ff9554b9",
+      "file_hash": "1af077403ed9e6b43a1107b1ff9554b9",
+      "original_name": "Lecture 1 Introduction to ML.pdf",
+      "saved_name": "1af077403ed9e6b43a1107b1ff9554b9_Lecture 1 Introduction to ML.pdf",
+      "file_type": "pdf",
+      "doc_type": "General",
+      "description": "",
+      "upload_date": "2026-01-28T23:44:48.914316",
+      "size_bytes": 3165447,
+      "text_length": 0,
+      "vectorized": false
+    },
+    {
+      "id": "3ace160b98d9410c4eb3465b1b018e09",
+      "file_hash": "3ace160b98d9410c4eb3465b1b018e09",
+      "original_name": "SCM policies.pdf",
+      "saved_name": "3ace160b98d9410c4eb3465b1b018e09_SCM policies.pdf",
+      "file_type": "pdf",
+      "doc_type": "Policy",
+      "description": "",
+      "upload_date": "2026-01-30T00:06:06.878797",
+      "size_bytes": 66435,
+      "text_length": 0,
+      "vectorized": false
+    }
+  ]
+}

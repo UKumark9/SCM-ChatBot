@@ -183,22 +183,61 @@ class DataSynthesizer:
         orders_df['order_date'] = pd.to_datetime(orders_df['order_purchase_timestamp']).dt.date
         daily_orders = orders_df.groupby('order_date').size().reset_index(name='order_count')
         daily_orders['order_date'] = pd.to_datetime(daily_orders['order_date'])
-        
+
         # Simple moving average forecast
         ma_window = 7
         daily_orders['forecast'] = daily_orders['order_count'].rolling(window=ma_window).mean()
-        
+
         # Generate future dates
         last_date = daily_orders['order_date'].max()
         future_dates = pd.date_range(start=last_date + timedelta(days=1), periods=periods, freq='D')
-        
+
         # Use last moving average as forecast
         last_forecast = daily_orders['forecast'].dropna().iloc[-1]
-        
+
         forecast_df = pd.DataFrame({
             'date': future_dates,
             'forecasted_orders': [last_forecast] * periods
         })
-        
+
         logger.info(f"Generated {periods}-day demand forecast")
         return forecast_df
+
+    @staticmethod
+    def generate_shipping_data(orders_df: pd.DataFrame) -> pd.DataFrame:
+        """Generate synthetic shipping and logistics data"""
+        np.random.seed(42)
+
+        n_orders = len(orders_df)
+        shipping_data = orders_df[['order_id']].copy()
+
+        shipping_data['carrier'] = np.random.choice(
+            ['FedEx', 'UPS', 'DHL', 'USPS', 'Local Courier'],
+            n_orders,
+            p=[0.3, 0.25, 0.2, 0.15, 0.1]
+        )
+        shipping_data['shipping_cost'] = np.random.uniform(5, 50, n_orders).round(2)
+        shipping_data['package_weight_kg'] = np.random.uniform(0.5, 25, n_orders).round(2)
+        shipping_data['tracking_events'] = np.random.randint(3, 15, n_orders)
+        shipping_data['delivery_attempts'] = np.random.choice([1, 2, 3], n_orders, p=[0.85, 0.12, 0.03])
+
+        logger.info(f"Generated shipping data for {n_orders} orders")
+        return shipping_data
+
+    @staticmethod
+    def generate_warehouse_data(n_warehouses: int = 10) -> pd.DataFrame:
+        """Generate synthetic warehouse data"""
+        np.random.seed(42)
+
+        warehouses = pd.DataFrame({
+            'warehouse_id': [f'WH-{str(i).zfill(3)}' for i in range(n_warehouses)],
+            'warehouse_name': [f'Distribution Center {chr(65+i)}' for i in range(n_warehouses)],
+            'location': np.random.choice(['North', 'South', 'East', 'West', 'Central'], n_warehouses),
+            'capacity': np.random.randint(10000, 100000, n_warehouses),
+            'current_utilization': np.random.uniform(0.5, 0.95, n_warehouses).round(2),
+            'staff_count': np.random.randint(10, 100, n_warehouses),
+            'operational_cost_daily': np.random.uniform(1000, 10000, n_warehouses).round(2)
+        })
+
+        logger.info(f"Generated {n_warehouses} warehouse records")
+        return warehouses

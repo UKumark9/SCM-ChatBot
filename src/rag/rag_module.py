@@ -239,8 +239,8 @@ class VectorDatabase:
 class RAGModule:
     """Retrieval-Augmented Generation Module"""
     
-    def __init__(self, vector_db: VectorDatabase, top_k: int = 5,
-                 similarity_threshold: float = 1.5):
+    def __init__(self, vector_db: VectorDatabase, top_k: int = 5, 
+                 similarity_threshold: float = 0.7):
         self.vector_db = vector_db
         self.top_k = top_k
         self.similarity_threshold = similarity_threshold
@@ -308,7 +308,7 @@ def build_rag_system(data_processor, config: Dict) -> Tuple[VectorDatabase, RAGM
         rag = RAGModule(
             vector_db=vector_db,
             top_k=config.get('top_k', 5),
-            similarity_threshold=config.get('similarity_threshold', 1.5)
+            similarity_threshold=config.get('similarity_threshold', 0.7)
         )
         
         logger.info("RAG system built successfully")
