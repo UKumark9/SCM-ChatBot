@@ -50,17 +50,22 @@ class ForecastingAgent:
                 Tool(
                     name="ForecastDemand30Days",
                     func=lambda x: self._forecast_demand(30),
-                    description="Forecast demand for the next 30 days"
+                    description="Forecast overall demand for the next 30 days"
                 ),
                 Tool(
                     name="ForecastDemand60Days",
                     func=lambda x: self._forecast_demand(60),
-                    description="Forecast demand for the next 60 days"
+                    description="Forecast overall demand for the next 60 days"
                 ),
                 Tool(
                     name="ForecastDemand90Days",
                     func=lambda x: self._forecast_demand(90),
-                    description="Forecast demand for the next 90 days"
+                    description="Forecast overall demand for the next 90 days"
+                ),
+                Tool(
+                    name="ForecastProductDemand",
+                    func=self._forecast_product_demand,
+                    description="Forecast demand for a specific product. Input format: 'product_id:PRODUCT_ID,periods:NUMBER' (e.g., 'product_id:12345,periods:30')"
                 ),
             ]
 
@@ -68,7 +73,24 @@ class ForecastingAgent:
                 ("system", """You are a specialized Demand Forecasting Agent.
 Your expertise is in predicting future demand, analyzing trends, and helping with inventory planning.
 
-Use forecasting tools to provide accurate predictions and actionable insights."""),
+IMPORTANT INSTRUCTIONS:
+- Answer ONLY what the user specifically asks for
+- Be concise and direct - don't provide extra information unless requested
+- If asked for a specific forecast period, provide only that forecast
+- If asked for "analysis" or "detailed forecast", provide comprehensive details
+- Always include trend direction and key numbers
+
+Available forecasting tools:
+1. ForecastDemand30Days/60Days/90Days - For overall demand across all products
+2. ForecastProductDemand - For product-specific demand forecasting
+
+RESPONSE GUIDELINES:
+- "Forecast demand for 30 days" → Provide forecast with trend and historical avg
+- "What will demand be?" → Provide simple forecast answer
+- "Detailed forecast analysis" → Include all metrics and insights
+- "Forecast for product X" → Use product-specific tool
+
+Extract only the relevant information from tool results to answer the specific question."""),
                 ("human", "{input}"),
             ])
 
@@ -97,6 +119,70 @@ Use forecasting tools to provide accurate predictions and actionable insights.""
 - Forecast Method: {result.get('forecast_method', 'Statistical')}"""
         except Exception as e:
             return f"Error forecasting demand: {e}"
+
+    def _forecast_product_demand(self, query: str = "") -> str:
+        """Forecast demand for a specific product"""
+        try:
+            # Parse query to extract product_id and periods
+            product_id = None
+            periods = 30  # Default
+
+            if query:
+                parts = query.split(',')
+                for part in parts:
+                    part = part.strip()
+                    if part.startswith("product_id:"):
+                        product_id = part.replace("product_id:", "").strip()
+                    elif part.startswith("periods:"):
+                        try:
+                            periods = int(part.replace("periods:", "").strip())
+                        except ValueError:
+                            periods = 30
+
+            if not product_id:
+                return "Error: Product ID is required for product-level forecasting. Use format: 'product_id:PRODUCT_ID,periods:NUMBER'"
+
+            # Get forecast from analytics engine
+            result = self.analytics.forecast_demand(
+                product_id=product_id,
+                periods=periods
+            )
+
+            response = f"""Product Demand Forecast:
+
+📦 **Product**: {product_id}
+📅 **Forecast Period**: {periods} days
+
+📊 **Historical Performance:**
+- Historical Average: {result['historical_average']:.1f} units/day
+- Trend: {result['trend'].title()}
+
+📈 **Forecast Quality:**
+- Model Accuracy (MAPE): {result['model_metrics']['mape']:.2f}%
+- R² Score: {result['model_metrics']['r_squared']:.3f}
+- RMSE: {result['model_metrics']['rmse']:.2f}
+
+💡 **Insights:**
+"""
+            if result['trend'] == 'increasing':
+                response += "- Demand is growing. Consider increasing inventory levels.\n"
+            elif result['trend'] == 'decreasing':
+                response += "- Demand is declining. May need to adjust procurement.\n"
+            else:
+                response += "- Demand is stable. Maintain current inventory strategy.\n"
+
+            if result['model_metrics']['mape'] < 15:
+                response += "- High forecast accuracy. Reliable for planning.\n"
+            elif result['model_metrics']['mape'] < 30:
+                response += "- Moderate forecast accuracy. Use with caution.\n"
+            else:
+                response += "- Low forecast accuracy. Consider additional data sources.\n"
+
+            return response
+
+        except Exception as e:
+            logger.error(f"Error in product demand forecasting: {e}")
+            return f"Error forecasting product demand: {e}"
 
     def query(self, user_query: str) -> Dict[str, Any]:
         """Process forecasting query"""
@@ -143,9 +229,11 @@ Use forecasting tools to provide accurate predictions and actionable insights.""
 
                 response = self._forecast_demand(periods)
 
-                # Append RAG context if available
-                if used_rag:
-                    response += f"\n\n📚 **Additional Context from Documents:**\n{rag_context[:500]}..."
+                # Append RAG context if available and meaningful
+                if used_rag and rag_context and len(rag_context.strip()) > 20 and "no relevant" not in rag_context.lower():
+                    response += f"\n\n📚 **Document Context:**\n{rag_context[:400]}"
+                    if len(rag_context) > 400:
+                        response += "..."
 
                 return {
                     'response': response,

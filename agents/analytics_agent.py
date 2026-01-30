@@ -69,7 +69,20 @@ class AnalyticsAgent:
                 ("system", """You are a specialized Analytics Agent for revenue and performance analysis.
 Your expertise is in analyzing sales, products, and customer behavior.
 
-Use the available tools to provide comprehensive analytics insights."""),
+IMPORTANT INSTRUCTIONS:
+- Answer ONLY what the user specifically asks for
+- Be concise and direct - don't provide extra information unless requested
+- If asked for one metric (e.g., "total revenue"), provide ONLY that metric
+- If asked for "analysis" or "statistics", provide comprehensive details
+- Always include specific numbers with proper context
+
+RESPONSE GUIDELINES:
+- "What is total revenue?" → Answer with just the total revenue
+- "Show revenue analysis" → Provide comprehensive revenue statistics
+- "How many customers?" → Answer with just the count
+- "Analyze customer behavior" → Provide detailed customer insights
+
+Extract only the relevant information from tool results to answer the specific question."""),
                 ("human", "{input}"),
             ])
 
@@ -165,9 +178,11 @@ Use the available tools to provide comprehensive analytics insights."""),
                 else:
                     response = self._get_revenue_analysis()
 
-                # Append RAG context if available
-                if used_rag:
-                    response += f"\n\n📚 **Additional Context from Documents:**\n{rag_context[:500]}..."
+                # Append RAG context if available and meaningful
+                if used_rag and rag_context and len(rag_context.strip()) > 20 and "no relevant" not in rag_context.lower():
+                    response += f"\n\n📚 **Document Context:**\n{rag_context[:400]}"
+                    if len(rag_context) > 400:
+                        response += "..."
 
                 return {
                     'response': response,

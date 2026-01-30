@@ -189,9 +189,11 @@ Use the available tools to answer specific data queries."""),
                 else:
                     response = self._get_data_summary()
 
-                # Append RAG context if available
-                if used_rag:
-                    response += f"\n\n📚 **Additional Context from Documents:**\n{rag_context[:500]}..."
+                # Append RAG context if available and meaningful
+                if used_rag and rag_context and len(rag_context.strip()) > 20 and "no relevant" not in rag_context.lower():
+                    response += f"\n\n📚 **Document Context:**\n{rag_context[:400]}"
+                    if len(rag_context) > 400:
+                        response += "..."
 
                 return {
                     'response': response,

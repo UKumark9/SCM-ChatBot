@@ -342,7 +342,7 @@ class SCMChatbotApp:
     def initialize_enhanced_chatbot(self):
         """Initialize enhanced chatbot with LLM and RAG"""
         if not self.use_enhanced:
-            logger.info("Using legacy chatbot")
+            logger.info("Enhanced chatbot disabled")
             return False
 
         try:
@@ -425,7 +425,7 @@ class SCMChatbotApp:
         """Initialize Feature Store for ML caching"""
         try:
             logger.info("Initializing Feature Store...")
-            from feature_store import FeatureStore, MLFeatures
+            from modules.feature_store import FeatureStore, MLFeatures
 
             self.feature_store = FeatureStore(use_redis=False)
             self.ml_features = MLFeatures(self.feature_store)
@@ -440,7 +440,7 @@ class SCMChatbotApp:
         """Initialize Document Manager for business docs"""
         try:
             logger.info("Initializing Document Manager...")
-            from document_manager import DocumentManager
+            from modules.document_manager import DocumentManager
 
             self.document_manager = DocumentManager(
                 docs_path="data/business_docs",
@@ -457,13 +457,13 @@ class SCMChatbotApp:
         """Initialize Data Pipeline connectors"""
         try:
             logger.info("Initializing Data Pipeline...")
-            from data_connectors import DataPipeline
+            from modules.data_connectors import DataPipeline
 
             self.data_pipeline = DataPipeline()
 
             # Add example connectors here if configured
             # Example:
-            # from data_connectors import PostgreSQLConnector
+            # from modules.data_connectors import PostgreSQLConnector
             # pg = PostgreSQLConnector(host='localhost', ...)
             # self.data_pipeline.add_connector('postgresql', pg)
 
@@ -517,7 +517,7 @@ class SCMChatbotApp:
 
         Args:
             user_input: The user's query string
-            mode: Optional mode specification ('agentic', 'enhanced', 'legacy').
+            mode: Optional mode specification ('agentic', 'enhanced').
                   If None, uses priority-based routing.
 
         Returns:
@@ -536,10 +536,8 @@ class SCMChatbotApp:
                         return self.enhanced_chatbot.query(user_input, show_agent=self.show_agent)
                     else:
                         return "⚠️ Enhanced mode not available. Enhanced chatbot not initialized."
-                elif mode == 'legacy':
-                    return self._process_legacy_query(user_input)
                 else:
-                    return f"⚠️ Unknown mode: {mode}. Valid modes: 'agentic', 'enhanced', 'legacy'"
+                    return f"⚠️ Unknown mode: {mode}. Valid modes: 'agentic', 'enhanced'"
 
             # Priority-based routing (existing behavior)
             # Use orchestrator if available (priority)
@@ -550,136 +548,14 @@ class SCMChatbotApp:
             if self.enhanced_chatbot:
                 return self.enhanced_chatbot.query(user_input, show_agent=self.show_agent)
 
-            # Fallback to legacy rule-based system
-            user_input_lower = user_input.lower()
+            # No mode available
+            return """⚠️ No query processing mode available.
 
-            if not self.analytics:
-                return "Analytics not initialized. Please check data loading."
+Please ensure either:
+- **Agentic Mode** (Multi-Agent System) is initialized
+- **Enhanced Mode** (LLM-powered) is initialized
 
-            # DELIVERY DELAY QUERIES
-            if any(word in user_input_lower for word in ['delay', 'delayed', 'late', 'on-time', 'on time', 'delivery performance']):
-                result = self.analytics.analyze_delivery_delays()
-
-                # Check if asking about states
-                if 'state' in user_input_lower or 'where' in user_input_lower or 'which' in user_input_lower:
-                    # Get top delayed states
-                    delays_by_state = result.get('delays_by_state', {})
-
-                    if delays_by_state:
-                        # Convert to sorted list
-                        state_delays = [(state, count) for state, count in delays_by_state.items()]
-                        state_delays.sort(key=lambda x: x[1], reverse=True)
-
-                        response = "📍 States with Most Delivery Delays:\n\n"
-                        for i, (state, rate) in enumerate(state_delays[:10], 1):
-                            response += f"{i}. {state}: {rate*100:.1f}% delay rate\n"
-
-                        return response
-                    else:
-                        return "No state-level delay data available."
-
-                # Check if asking about on-time performance
-                elif 'on-time' in user_input_lower or 'on time' in user_input_lower:
-                    on_time_rate = 100 - result['delay_rate_percentage']
-                    return f"""✅ On-Time Delivery Performance:
-
-    - On-Time Deliveries: {result['total_orders'] - result['delayed_orders']:,}
-    - On-Time Rate: {on_time_rate:.2f}%
-    - Total Orders: {result['total_orders']:,}
-    - Delayed Orders: {result['delayed_orders']:,}
-
-    Performance Grade: {'Excellent' if on_time_rate >= 95 else 'Good' if on_time_rate >= 90 else 'Needs Improvement'}"""
-
-                # Default delay rate response
-                else:
-                    return f"""📊 Delivery Delay Analysis:
-
-    - Total Orders: {result['total_orders']:,}
-    - Delayed Orders: {result['delayed_orders']:,}
-    - Delay Rate: {result['delay_rate_percentage']:.2f}%
-    - On-Time Rate: {100 - result['delay_rate_percentage']:.2f}%
-    - Average Delay: {result['average_delay_days']:.1f} days
-    - Maximum Delay: {result['max_delay_days']:.0f} days
-    - Median Delay: {result['median_delay_days']:.1f} days"""
-
-            # REVENUE QUERIES
-            elif 'revenue' in user_input_lower or 'sales' in user_input_lower:
-                result = self.analytics.analyze_revenue_trends()
-                return f"""💰 Revenue Analysis:
-    - Total Revenue: ${result['total_revenue']:,.2f}
-    - Average Order Value: ${result['average_order_value']:.2f}
-    - Monthly Growth: {result['average_monthly_growth_rate']:.2f}%"""
-
-            # FORECAST QUERIES
-            elif 'forecast' in user_input_lower or 'demand' in user_input_lower or 'predict' in user_input_lower:
-                result = self.analytics.forecast_demand(periods=30)
-                return f"""📈 Demand Forecast (30 days):
-    - Historical Avg: {result['historical_average']:.1f} items/day
-    - MAPE: {result['model_metrics']['mape']:.2f}%
-    - Trend: {result['trend']}
-    - R²: {result['model_metrics']['r_squared']:.3f}"""
-
-            # PRODUCT QUERIES
-            elif 'product' in user_input_lower:
-                result = self.analytics.analyze_product_performance()
-                return f"""📦 Product Analysis:
-    - Unique Products: {result['total_unique_products']:,}
-    - Total Items Sold: {result['total_items_sold']:,}
-    - Average Price: ${result['average_product_price']:.2f}"""
-
-            # CUSTOMER QUERIES
-            elif 'customer' in user_input_lower:
-                result = self.analytics.analyze_customer_behavior()
-                return f"""👥 Customer Analysis:
-    - Total Customers: {result['total_customers']:,}
-    - Active Customers: {result['active_customers']:,}
-    - Avg Orders/Customer: {result['average_orders_per_customer']:.2f}
-    - Repeat Rate: {result['repeat_customer_rate']:.1f}%"""
-
-            # COMPREHENSIVE REPORT
-            elif 'report' in user_input_lower or 'comprehensive' in user_input_lower:
-                result = self.analytics.generate_comprehensive_report()
-                return f"""📋 Comprehensive SCM Report
-
-    DELIVERY PERFORMANCE:
-    - Delay Rate: {result['delivery_analysis']['delay_rate_percentage']:.2f}%
-    - Avg Delay: {result['delivery_analysis']['average_delay_days']:.1f} days
-
-    REVENUE METRICS:
-    - Total Revenue: ${result['revenue_analysis']['total_revenue']:,.2f}
-    - Avg Order Value: ${result['revenue_analysis']['average_order_value']:.2f}
-
-    PRODUCTS:
-    - Unique Products: {result['product_analysis']['total_unique_products']:,}
-    - Total Sold: {result['product_analysis']['total_items_sold']:,}
-
-    CUSTOMERS:
-    - Active Customers: {result['customer_analysis']['active_customers']:,}
-    - Repeat Rate: {result['customer_analysis']['repeat_customer_rate']:.1f}%"""
-
-            # DEFAULT HELP MESSAGE
-            else:
-                return """🤖 I can help with:
-
-    📊 Delivery Analysis:
-      • "What is the delivery delay rate?"
-      • "Which states have the most delays?"
-      • "Show me on-time delivery performance"
-
-    💰 Revenue Trends:
-      • "Show me revenue analysis"
-    
-    📈 Demand Forecast:
-      • "Forecast demand for 30 days"
-
-    📦 Products & Customers:
-      • "Analyze product performance"
-      • "Analyze customer behavior"
-
-    📋 Full Report:
-      • "Generate comprehensive report"
-
-    What would you like to know?"""
+Check your API keys and system configuration."""
 
         except Exception as e:
             logger.error(f"Query error: {e}")
@@ -687,93 +563,6 @@ class SCMChatbotApp:
             traceback.print_exc()
             return f"❌ Error: {str(e)}"
 
-    def _process_legacy_query(self, user_input: str) -> str:
-        """Process query using legacy rule-based system"""
-        user_input_lower = user_input.lower()
-
-        if not self.analytics:
-            return "Analytics not initialized. Please check data loading."
-
-        try:
-            # DELIVERY DELAY QUERIES
-            if any(word in user_input_lower for word in ['delay', 'delayed', 'late', 'on-time', 'on time', 'delivery performance']):
-                result = self.analytics.analyze_delivery_delays()
-
-                # Check if asking about states
-                if 'state' in user_input_lower or 'where' in user_input_lower or 'which' in user_input_lower:
-                    delays_by_state = result.get('delays_by_state', {})
-                    if delays_by_state:
-                        state_delays = [(state, count) for state, count in delays_by_state.items()]
-                        state_delays.sort(key=lambda x: x[1], reverse=True)
-
-                        response = "📍 States with Most Delivery Delays:\n\n"
-                        for i, (state, rate) in enumerate(state_delays[:10], 1):
-                            response += f"{i}. {state}: {rate*100:.1f}% delay rate\n"
-
-                        if self.show_agent:
-                            response += "\n" + "─"*60 + "\n"
-                            response += "⚙️ **Agent**: Legacy Rule-Based System\n"
-                            response += "📊 **Mode**: Pattern Matching\n"
-                            response += "─"*60
-
-                        return response
-
-                # Default delay response
-                response = f"""📊 Delivery Delay Analysis:
-
-- Total Orders: {result['total_orders']:,}
-- Delayed Orders: {result['delayed_orders']:,}
-- Delay Rate: {result['delay_rate_percentage']:.2f}%
-- On-Time Rate: {100 - result['delay_rate_percentage']:.2f}%
-- Average Delay: {result['average_delay_days']:.1f} days"""
-
-                if self.show_agent:
-                    response += "\n\n" + "─"*60 + "\n"
-                    response += "⚙️ **Agent**: Legacy Rule-Based System\n"
-                    response += "📊 **Mode**: Pattern Matching\n"
-                    response += "─"*60
-
-                return response
-
-            # REVENUE QUERIES
-            elif 'revenue' in user_input_lower or 'sales' in user_input_lower:
-                result = self.analytics.analyze_revenue_trends()
-                response = f"""💰 Revenue Analysis:
-- Total Revenue: ${result['total_revenue']:,.2f}
-- Average Order Value: ${result['average_order_value']:.2f}
-- Monthly Growth: {result['average_monthly_growth_rate']:.2f}%"""
-
-                if self.show_agent:
-                    response += "\n\n" + "─"*60 + "\n"
-                    response += "⚙️ **Agent**: Legacy Rule-Based System\n"
-                    response += "📊 **Mode**: Pattern Matching\n"
-                    response += "─"*60
-
-                return response
-
-            # DEFAULT HELP
-            else:
-                response = """🤖 I can help with:
-
-📊 Delivery Analysis:
-  • "What is the delivery delay rate?"
-  • "Which states have the most delays?"
-
-💰 Revenue Trends:
-  • "Show me revenue analysis"
-
-What would you like to know?"""
-
-                if self.show_agent:
-                    response += "\n\n" + "─"*60 + "\n"
-                    response += "⚙️ **Agent**: Legacy Rule-Based System\n"
-                    response += "📊 **Mode**: Pattern Matching\n"
-                    response += "─"*60
-
-                return response
-
-        except Exception as e:
-            return f"❌ Error in legacy query: {str(e)}"
 
     def run_cli(self):
         """CLI mode"""
@@ -813,8 +602,8 @@ What would you like to know?"""
                 current_mode = "enhanced"
                 mode_info = "Enhanced AI"
             else:
-                current_mode = "legacy"
-                mode_info = "Rule-Based"
+                current_mode = "enhanced"
+                mode_info = "Not Initialized"
 
             rag_info = " + RAG" if self.use_rag else ""
 
@@ -940,12 +729,30 @@ What would you like to know?"""
                                 mode_selector = gr.Radio(
                                     choices=[
                                         ("🤖 Agentic (Multi-Agent)", "agentic"),
-                                        ("✨ Enhanced (Single LLM)", "enhanced"),
-                                        ("📊 Legacy (Rule-Based)", "legacy")
+                                        ("✨ Enhanced (Single LLM)", "enhanced")
                                     ],
                                     value=current_mode,
                                     label="Execution Mode",
                                     info="Select how queries are processed"
+                                )
+
+                                # Available Agents section (visible only in Agentic mode)
+                                agents_section = gr.Markdown(
+                                    """### Available Agents
+
+**🚚 Delay Agent**
+Analyzes delivery performance, delays, and carrier metrics
+
+**📊 Analytics Agent**
+Provides revenue, sales, and customer insights
+
+**📈 Forecasting Agent**
+Generates demand predictions and trend analysis
+
+**🔍 Data Query Agent**
+Retrieves specific orders, customers, and products
+""" if current_mode == "agentic" else "",
+                                    visible=(current_mode == "agentic")
                                 )
 
                                 gr.Markdown("### Example Queries")
@@ -966,17 +773,14 @@ What would you like to know?"""
                                 **🤖 Agentic Mode**
                                 - Multiple specialized agents
                                 - Intelligent routing
-                                - LangChain framework
+                                - RAG integration
+                                - Best for complex queries
 
                                 **✨ Enhanced Mode**
                                 - Single LLM
                                 - Direct API calls
-                                - Adaptive responses
-
-                                **📊 Legacy Mode**
-                                - Rule-based patterns
-                                - Fast keyword matching
-                                - No LLM required
+                                - Fast responses
+                                - Best for simple queries
                                 """)
 
                     # Document Management Tab
@@ -1036,6 +840,56 @@ What would you like to know?"""
                             outputs=stats_output
                         )
 
+                    # Performance Metrics Tab
+                    with gr.Tab("⚡ Performance Metrics"):
+                        gr.Markdown("## Query Performance Comparison")
+                        gr.Markdown("Compare single-agent (Enhanced) vs multi-agent (Agentic) performance")
+
+                        with gr.Row():
+                            with gr.Column():
+                                gr.Markdown("### Metrics Tracked")
+                                gr.Markdown("""
+**For Each Query:**
+- ⏱️ **Latency** - Response time in milliseconds
+- 🔤 **Token Usage** - LLM tokens consumed
+- ✅ **Task Completion** - Whether query succeeded
+- 🎯 **Hallucination Risk** - Grounding in actual data
+- 📚 **RAG Usage** - Document context retrieval
+- 🤖 **Agents Used** - Number and type of agents
+
+**Comparison Insights:**
+- Performance differences between modes
+- Cost analysis (token usage)
+- Accuracy comparison
+- When to use each mode
+                                """)
+
+                        metrics_output = gr.Markdown()
+                        with gr.Row():
+                            metrics_window = gr.Slider(
+                                minimum=10,
+                                maximum=100,
+                                value=50,
+                                step=10,
+                                label="Analysis Window (number of recent queries)"
+                            )
+                        refresh_metrics_btn = gr.Button("Refresh Performance Metrics", variant="primary")
+
+                        def show_performance_metrics(window):
+                            """Display performance comparison metrics"""
+                            try:
+                                from metrics_tracker import get_metrics_tracker
+                                tracker = get_metrics_tracker()
+                                return tracker.format_comparison_display(window=int(window))
+                            except Exception as e:
+                                return f"⚠️ Error loading metrics: {e}\n\nMetrics tracking may not be initialized yet. Try running some queries first."
+
+                        refresh_metrics_btn.click(
+                            show_performance_metrics,
+                            inputs=metrics_window,
+                            outputs=metrics_output
+                        )
+
                 def respond(message, chat_history, mode):
                     if not message.strip():
                         return "", chat_history
@@ -1049,9 +903,39 @@ What would you like to know?"""
 
                     return "", chat_history
 
+                def update_agents_visibility(mode):
+                    """Show/hide agents section based on selected mode"""
+                    if mode == "agentic":
+                        return gr.update(
+                            value="""### Available Agents
+
+**🚚 Delay Agent**
+Analyzes delivery performance, delays, and carrier metrics
+
+**📊 Analytics Agent**
+Provides revenue, sales, and customer insights
+
+**📈 Forecasting Agent**
+Generates demand predictions and trend analysis
+
+**🔍 Data Query Agent**
+Retrieves specific orders, customers, and products
+""",
+                            visible=True
+                        )
+                    else:
+                        return gr.update(value="", visible=False)
+
                 # Event handlers for chat
                 msg.submit(respond, [msg, chatbot, mode_selector], [msg, chatbot])
                 submit_btn.click(respond, [msg, chatbot, mode_selector], [msg, chatbot])
+
+                # Event handler for mode selector
+                mode_selector.change(
+                    update_agents_visibility,
+                    inputs=mode_selector,
+                    outputs=agents_section
+                )
 
             print("\n" + "="*70)
             print(f"🌐 Starting Web Interface ({mode_info}{rag_info})...")
@@ -1099,8 +983,6 @@ def main():
                        help='Use multi-agent agentic mode (takes priority over enhanced)')
     parser.add_argument('--enhanced', action='store_true', default=True,
                        help='Use enhanced chatbot with LLM (default: True)')
-    parser.add_argument('--legacy', action='store_true', default=False,
-                       help='Use legacy rule-based chatbot only')
     parser.add_argument('--rag', action='store_true', default=True,
                        help='Enable RAG (Retrieval-Augmented Generation) for semantic search (default: True)')
     parser.add_argument('--no-rag', dest='rag', action='store_false',
@@ -1108,12 +990,12 @@ def main():
     parser.add_argument('--hide-agent', action='store_true', default=False,
                        help='Hide agent execution info from responses')
     parser.add_argument('--init-all', action='store_true', default=False,
-                       help='Initialize all modes (orchestrator + enhanced + legacy) for UI mode switching')
+                       help='Initialize all modes (orchestrator + enhanced) for UI mode switching')
 
     args = parser.parse_args()
 
     # Determine which mode to use
-    use_enhanced = not args.legacy if args.legacy else args.enhanced
+    use_enhanced = args.enhanced
     show_agent = not args.hide_agent
 
     # If agentic mode is enabled, disable enhanced mode
@@ -1124,7 +1006,7 @@ def main():
     init_all_modes = args.init_all
 
     # If UI mode and no specific mode flags, automatically init all modes
-    if args.mode == 'ui' and not (args.agentic or args.legacy):
+    if args.mode == 'ui' and not args.agentic:
         init_all_modes = True
 
     app = SCMChatbotApp(

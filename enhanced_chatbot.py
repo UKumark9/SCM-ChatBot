@@ -537,8 +537,23 @@ I can provide insights on:
 
 What would you like to know?"""
 
-    def query(self, user_query: str, show_agent: bool = True) -> str:
+    def query(self, user_query: str, show_agent: bool = True, show_metrics: bool = True) -> str:
         """Process user query and generate response"""
+        # Import metrics tracker
+        try:
+            from metrics_tracker import get_metrics_tracker
+            import time
+            metrics_tracker = get_metrics_tracker()
+        except:
+            metrics_tracker = None
+            show_metrics = False
+
+        # Start metrics tracking
+        query_id = None
+        if metrics_tracker:
+            query_id = metrics_tracker.start_query(user_query, mode='enhanced')
+            metrics_tracker.add_data_source(query_id, 'analytics_engine')
+
         try:
             logger.info(f"Processing query: {user_query}")
 
@@ -551,6 +566,11 @@ What would you like to know?"""
 
             # Retrieve context using RAG if available
             context = self.retrieve_context(user_query) if self.rag else ""
+            used_rag = bool(context and self.rag)
+
+            # Track RAG usage
+            if metrics_tracker and query_id and used_rag:
+                metrics_tracker.add_data_source(query_id, 'rag_documents')
 
             agent_info = ""
             response_text = ""
@@ -561,13 +581,19 @@ What would you like to know?"""
                 if llm_response:
                     response_text = llm_response
 
+                    # Track agent execution
+                    if metrics_tracker and query_id:
+                        metrics_tracker.add_agent_execution(query_id, 'Enhanced LLM', used_rag=used_rag)
+                        # Calculate hallucination score
+                        metrics_tracker.calculate_hallucination_score(query_id, response_text, ground_truth_data=analytics_data)
+
                     # Build agent info
                     if show_agent:
                         agent_info = self._build_agent_info(
                             agent="Enhanced AI (LLM)",
                             model="Llama 3.3 70B",
                             complexity=intent.get('complexity', 'moderate'),
-                            rag_used=bool(context and self.rag)
+                            rag_used=used_rag
                         )
 
                     # Add to conversation history
@@ -578,11 +604,27 @@ What would you like to know?"""
                         'agent': 'llm'
                     })
 
+                    # End metrics tracking
+                    if metrics_tracker and query_id:
+                        metrics_tracker.end_query(query_id, success=True)
+
+                        if show_metrics:
+                            # Get the saved metrics
+                            recent = metrics_tracker.get_recent_metrics(limit=1)
+                            if recent:
+                                metrics_display = self._format_compact_metrics(recent[0])
+                                response_text += metrics_display
+
                     return response_text + agent_info
 
             # Fallback to rule-based response
             rule_response = self.generate_rule_based_response(user_query, intent, analytics_data)
             response_text = rule_response
+
+            # Track rule-based execution
+            if metrics_tracker and query_id:
+                metrics_tracker.add_agent_execution(query_id, 'Rule-Based', used_rag=False)
+                metrics_tracker.calculate_hallucination_score(query_id, response_text, ground_truth_data=analytics_data)
 
             # Build agent info
             if show_agent:
@@ -601,31 +643,77 @@ What would you like to know?"""
                 'agent': 'rule-based'
             })
 
+            # End metrics tracking
+            if metrics_tracker and query_id:
+                metrics_tracker.end_query(query_id, success=True)
+
+                if show_metrics:
+                    # Get the saved metrics
+                    recent = metrics_tracker.get_recent_metrics(limit=1)
+                    if recent:
+                        metrics_display = self._format_compact_metrics(recent[0])
+                        response_text += metrics_display
+
             return response_text + agent_info
 
         except Exception as e:
             logger.error(f"Error processing query: {e}")
             import traceback
             traceback.print_exc()
+
+            # End metrics tracking with error
+            if metrics_tracker and query_id:
+                metrics_tracker.end_query(query_id, success=False, error=str(e))
+
             return f"❌ Error processing your query: {str(e)}\n\nPlease try rephrasing your question."
 
     def _build_agent_info(self, agent: str, model: str, complexity: str, rag_used: bool) -> str:
-        """Build agent execution information footer"""
+        """Build compact agent execution information footer"""
 
         # Color coding based on agent type
         agent_icon = "🤖" if "AI" in agent else "⚙️"
 
         info = f"\n\n{'─' * 60}\n"
-        info += f"{agent_icon} **Agent**: {agent}\n"
-        info += f"📋 **Model**: {model}\n"
-        info += f"🎯 **Query Complexity**: {complexity.title()}\n"
+        info += f"{agent_icon} **Agent:** {agent}"
 
         if rag_used:
-            info += f"🔍 **RAG**: Enabled (Semantic Search)\n"
+            info += " | 📚 **RAG**"
 
-        info += f"{'─' * 60}"
+        info += " | ✅ **Success**"
+
+        # Metrics will be appended on next line
+        info += f"\n{'─' * 60}"
 
         return info
+
+    def _format_compact_metrics(self, metrics: dict) -> str:
+        """Format compact metrics - only show fields with meaningful values"""
+        parts = []
+
+        # Add latency (always show if available)
+        if metrics.get('latency_ms'):
+            parts.append(f"⏱️ {metrics['latency_ms']:.0f}ms")
+
+        # Add data sources (compact icons only, no label)
+        sources = metrics.get('data_sources_used', [])
+        if sources and len(sources) > 0:
+            source_icons = {
+                'analytics_engine': '📊',
+                'rag_documents': '📚'
+            }
+            source_str = ''.join([source_icons.get(s, '💾') for s in sources])
+            if source_str:
+                parts.append(source_str)
+
+        # Hallucination score - only show if Medium or High (Low is expected)
+        halluc_score = metrics.get('hallucination_score', 0)
+        if halluc_score >= 0.3:  # Only show if Medium or High
+            risk_level = "Medium" if halluc_score < 0.6 else "High"
+            parts.append(f"🎯 {risk_level}")
+
+        if parts:
+            return "\n" + " | ".join(parts)
+        return ""
 
     def clear_history(self):
         """Clear conversation history"""

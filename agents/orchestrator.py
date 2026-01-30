@@ -6,6 +6,7 @@ Routes queries to specialized agents based on intent
 import logging
 from typing import Dict, Any, Optional, List
 import os
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -100,46 +101,71 @@ class AgentOrchestrator:
 
     def analyze_intent(self, query: str) -> Dict[str, Any]:
         """
-        Analyze query to determine which agent(s) should handle it
-        Supports multi-intent detection for compound queries
+        Enhanced intent analysis with compound query detection
+        Supports multi-intent detection for complex queries spanning multiple domains
 
         Args:
             query: User's query string
 
         Returns:
-            Dictionary with agent assignment(s) and confidence
+            Dictionary with agent assignment(s), confidence, and sub-queries
         """
         query_lower = query.lower()
 
         intent = {
             'agent': None,
-            'agents': [],  # NEW: List of agents for multi-intent queries
+            'agents': [],
             'confidence': 0.0,
-            'keywords': [],
-            'multi_intent': False  # NEW: Flag for compound queries
+            'keywords': {},
+            'multi_intent': False,
+            'sub_queries': {},  # NEW: Decomposed sub-queries for each agent
+            'execution_order': []  # NEW: Optimal agent execution order
         }
 
-        # Delay-related keywords
-        delay_keywords = ['delay', 'late', 'on-time', 'on time', 'delivery', 'shipped', 'arrived']
-        delay_score = sum(1 for kw in delay_keywords if kw in query_lower)
+        # Enhanced keyword patterns (single words and phrases)
+        delay_patterns = {
+            'keywords': ['delay', 'late', 'on-time', 'on time', 'delivery', 'shipped', 'arrived'],
+            'phrases': ['delivery delay', 'late delivery', 'delayed order', 'delivery performance',
+                       'on time delivery', 'shipping delay']
+        }
 
-        # Analytics keywords
-        analytics_keywords = ['revenue', 'sales', 'profit', 'customer', 'product', 'performance']
-        analytics_score = sum(1 for kw in analytics_keywords if kw in query_lower)
+        analytics_patterns = {
+            'keywords': ['revenue', 'sales', 'profit', 'customer', 'performance', 'order value'],
+            'phrases': ['total revenue', 'customer behavior', 'sales performance', 'revenue analysis',
+                       'product performance', 'top products', 'customer analysis']
+        }
 
-        # Forecasting keywords
-        forecast_keywords = ['forecast', 'predict', 'future', 'demand', 'trend', 'projection']
-        forecast_score = sum(1 for kw in forecast_keywords if kw in query_lower)
+        forecast_patterns = {
+            'keywords': ['forecast', 'predict', 'future', 'demand', 'projection', 'estimate'],
+            'phrases': ['demand forecast', 'predict demand', 'future demand', 'forecast sales',
+                       'demand prediction', 'trend forecast']
+        }
 
-        # Data query keywords
-        data_keywords = ['show', 'list', 'get', 'find', 'order id', 'customer id', 'record']
-        data_score = sum(1 for kw in data_keywords if kw in query_lower)
+        data_patterns = {
+            'keywords': ['show', 'list', 'get', 'find', 'display', 'retrieve'],
+            'phrases': ['show me', 'list all', 'find order', 'get customer', 'display data',
+                       'order details']
+        }
+
+        # Calculate scores with phrase bonuses
+        def calculate_score(patterns):
+            score = 0
+            # Keyword matches (1 point each)
+            score += sum(1 for kw in patterns['keywords'] if kw in query_lower)
+            # Phrase matches (2 points each - stronger signal)
+            score += sum(2 for phrase in patterns['phrases'] if phrase in query_lower)
+            return score
+
+        delay_score = calculate_score(delay_patterns)
+        analytics_score = calculate_score(analytics_patterns)
+        forecast_score = calculate_score(forecast_patterns)
+        data_score = calculate_score(data_patterns)
 
         # Comprehensive report keywords
-        comprehensive_keywords = ['comprehensive', 'report', 'overview', 'summary', 'all', 'everything']
-        comprehensive_score = sum(1 for kw in comprehensive_keywords if kw in query_lower)
+        comprehensive_keywords = ['comprehensive', 'report', 'overview', 'summary', 'all', 'everything', 'complete']
+        comprehensive_score = sum(2 for kw in comprehensive_keywords if kw in query_lower)
 
-        # Determine which agent(s) to use
+        # Store scores
         scores = {
             'delay': delay_score,
             'analytics': analytics_score,
@@ -148,35 +174,139 @@ class AgentOrchestrator:
             'comprehensive': comprehensive_score
         }
 
-        max_score = max(scores.values())
+        # Store matched keywords for each domain
+        intent['keywords'] = {
+            'delay': [kw for kw in delay_patterns['keywords'] if kw in query_lower],
+            'analytics': [kw for kw in analytics_patterns['keywords'] if kw in query_lower],
+            'forecasting': [kw for kw in forecast_patterns['keywords'] if kw in query_lower],
+            'data_query': [kw for kw in data_patterns['keywords'] if kw in query_lower]
+        }
 
-        # NEW: Multi-intent detection
-        # If multiple agents have scores >= threshold (e.g., 2), it's a compound query
+        # Detect conjunctions that indicate compound queries
+        conjunctions = [' and ', ' also ', ' plus ', ' as well as ', ' along with ', ' with ']
+        has_conjunction = any(conj in query_lower for conj in conjunctions)
+
+        # Enhanced multi-intent detection
         MULTI_INTENT_THRESHOLD = 2
         high_scoring_agents = [agent for agent, score in scores.items()
                                if score >= MULTI_INTENT_THRESHOLD and agent != 'comprehensive']
 
+        # Lower threshold if conjunction detected (indicates explicit multi-intent)
+        if has_conjunction and len(high_scoring_agents) == 1:
+            # Check for agents with score >= 1 when conjunction present
+            additional_agents = [agent for agent, score in scores.items()
+                                if score >= 1 and agent not in high_scoring_agents and agent != 'comprehensive']
+            high_scoring_agents.extend(additional_agents)
+
+        max_score = max(scores.values())
+
+        # Multi-intent query detection
         if len(high_scoring_agents) > 1:
-            # Multi-intent query detected
             intent['multi_intent'] = True
             intent['agents'] = high_scoring_agents
-            intent['agent'] = 'multi_agent'  # Special marker
-            intent['confidence'] = 0.8
-            logger.info(f"Multi-intent query detected: {high_scoring_agents}")
+            intent['agent'] = 'multi_agent'
+            intent['confidence'] = 0.85
+
+            # Decompose query into sub-queries for each agent
+            intent['sub_queries'] = self._decompose_query(query, high_scoring_agents)
+
+            # Determine execution order (data_query first if present, then others)
+            intent['execution_order'] = self._get_execution_order(high_scoring_agents)
+
+            logger.info(f"Multi-intent query detected: {high_scoring_agents} (execution order: {intent['execution_order']})")
+
+        elif comprehensive_score >= 2:
+            # Comprehensive report - use all agents
+            intent['multi_intent'] = True
+            intent['agents'] = ['delay', 'analytics', 'forecasting']
+            intent['agent'] = 'comprehensive'
+            intent['confidence'] = 0.9
+            intent['execution_order'] = ['delay', 'analytics', 'forecasting']
+            logger.info("Comprehensive report requested - invoking all agents")
+
         elif max_score == 0:
             # Default to analytics for general queries
             intent['agent'] = 'analytics'
             intent['agents'] = ['analytics']
             intent['confidence'] = 0.5
+
         else:
             # Single intent - get agent with highest score
             intent['agent'] = max(scores.items(), key=lambda x: x[1])[0]
             intent['agents'] = [intent['agent']]
-            intent['confidence'] = max_score / 10.0  # Normalize confidence
+            intent['confidence'] = min(max_score / 10.0, 0.95)  # Normalize, cap at 0.95
 
         logger.info(f"Intent analysis: {intent['agent']} (confidence: {intent['confidence']:.2f}, agents: {intent['agents']})")
 
         return intent
+
+    def _decompose_query(self, query: str, agents: List[str]) -> Dict[str, str]:
+        """
+        Decompose compound query into sub-queries for each agent
+
+        Args:
+            query: Original user query
+            agents: List of agents that will handle the query
+
+        Returns:
+            Dictionary mapping agent name to its sub-query
+        """
+        query_lower = query.lower()
+        sub_queries = {}
+
+        # Split on conjunctions
+        conjunctions = [' and ', ' also ', ' plus ', ' as well as ', ' along with ']
+        segments = [query]
+        for conj in conjunctions:
+            if conj in query_lower:
+                segments = query.split(conj)
+                break
+
+        # Assign segments to agents based on keyword presence
+        for agent in agents:
+            # Find segment most relevant to this agent
+            agent_query = query  # Default to full query
+
+            for segment in segments:
+                segment_lower = segment.lower()
+                if agent == 'delay' and any(kw in segment_lower for kw in ['delay', 'delivery', 'late', 'on-time']):
+                    agent_query = segment.strip()
+                    break
+                elif agent == 'analytics' and any(kw in segment_lower for kw in ['revenue', 'sales', 'customer', 'product']):
+                    agent_query = segment.strip()
+                    break
+                elif agent == 'forecasting' and any(kw in segment_lower for kw in ['forecast', 'predict', 'demand', 'future']):
+                    agent_query = segment.strip()
+                    break
+                elif agent == 'data_query' and any(kw in segment_lower for kw in ['show', 'list', 'find', 'get']):
+                    agent_query = segment.strip()
+                    break
+
+            sub_queries[agent] = agent_query
+
+        logger.info(f"Query decomposition: {sub_queries}")
+        return sub_queries
+
+    def _get_execution_order(self, agents: List[str]) -> List[str]:
+        """
+        Determine optimal execution order for agents
+
+        Args:
+            agents: List of agent names
+
+        Returns:
+            Ordered list of agents (data_query first if present, then others)
+        """
+        # Priority order: data_query (provides context) -> delay -> analytics -> forecasting
+        priority = {
+            'data_query': 1,
+            'delay': 2,
+            'analytics': 3,
+            'forecasting': 4
+        }
+
+        ordered = sorted(agents, key=lambda x: priority.get(x, 5))
+        return ordered
 
     def route_query(self, query: str) -> Dict[str, Any]:
         """
@@ -195,7 +325,7 @@ class AgentOrchestrator:
 
             # NEW: Handle multi-intent queries
             if intent.get('multi_intent', False) or intent['agent'] == 'multi_agent':
-                result = self._handle_multi_intent_query(query, intent['agents'])
+                result = self._handle_multi_intent_query(query, intent)
             # Route to appropriate agent for single intent
             elif intent['agent'] == 'delay':
                 result = self.delay_agent.query(query)
@@ -233,45 +363,69 @@ class AgentOrchestrator:
                 'success': False
             }
 
-    def _handle_multi_intent_query(self, query: str, agents: List[str]) -> Dict[str, Any]:
+    def _handle_multi_intent_query(self, query: str, intent: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Handle multi-intent queries that require multiple specific agents
+        Enhanced multi-intent handler with query decomposition and cross-agent insights
 
         Args:
             query: User's query
-            agents: List of agent names to invoke
+            intent: Intent analysis result with agents, sub-queries, and execution order
 
         Returns:
-            Combined response from all relevant agents
+            Combined response from all relevant agents with synthesized insights
         """
         try:
-            logger.info(f"Handling multi-intent query - invoking agents: {agents}")
+            agents = intent.get('agents', [])
+            sub_queries = intent.get('sub_queries', {})
+            execution_order = intent.get('execution_order', agents)
+
+            logger.info(f"Handling multi-intent query - invoking agents in order: {execution_order}")
+            logger.info(f"Sub-queries: {sub_queries}")
 
             results = {}
             agents_used = []
+            context_data = {}  # Store intermediate results for context sharing
 
-            # Route to each relevant agent
-            if 'delay' in agents:
-                logger.info("Calling Delay Agent for multi-intent query")
-                results['delay'] = self.delay_agent.query(query)
-                agents_used.append('delay')
+            # Execute agents in optimal order
+            for agent_name in execution_order:
+                if agent_name not in agents:
+                    continue
 
-            if 'analytics' in agents:
-                logger.info("Calling Analytics Agent for multi-intent query")
-                results['analytics'] = self.analytics_agent.query(query)
-                agents_used.append('analytics')
+                # Get agent-specific query (or use full query if not decomposed)
+                agent_query = sub_queries.get(agent_name, query)
 
-            if 'forecasting' in agents:
-                logger.info("Calling Forecasting Agent for multi-intent query")
-                results['forecasting'] = self.forecasting_agent.query(query)
-                agents_used.append('forecasting')
+                logger.info(f"Calling {agent_name.title()} Agent: '{agent_query}'")
 
-            if 'data_query' in agents:
-                logger.info("Calling Data Query Agent for multi-intent query")
-                results['data_query'] = self.data_query_agent.query(query)
-                agents_used.append('data_query')
+                # Route to appropriate agent
+                if agent_name == 'delay':
+                    results['delay'] = self.delay_agent.query(agent_query)
+                    agents_used.append('delay')
 
-            # Combine results in logical order
+                    # Extract delay metrics for cross-agent insights
+                    if results['delay'].get('success', True):
+                        context_data['delay_rate'] = self._extract_delay_rate(results['delay'].get('response', ''))
+
+                elif agent_name == 'analytics':
+                    results['analytics'] = self.analytics_agent.query(agent_query)
+                    agents_used.append('analytics')
+
+                    # Extract revenue metrics
+                    if results['analytics'].get('success', True):
+                        context_data['revenue_data'] = self._extract_revenue_data(results['analytics'].get('response', ''))
+
+                elif agent_name == 'forecasting':
+                    results['forecasting'] = self.forecasting_agent.query(agent_query)
+                    agents_used.append('forecasting')
+
+                    # Extract forecast trends
+                    if results['forecasting'].get('success', True):
+                        context_data['forecast_trend'] = self._extract_forecast_trend(results['forecasting'].get('response', ''))
+
+                elif agent_name == 'data_query':
+                    results['data_query'] = self.data_query_agent.query(agent_query)
+                    agents_used.append('data_query')
+
+            # Combine results in execution order (maintains logical flow)
             combined_response_parts = []
 
             # Section headers based on agent type
@@ -285,6 +439,7 @@ class AgentOrchestrator:
             # Track which agents used RAG
             agents_with_rag = []
 
+            # Add results in execution order
             for agent_name in agents_used:
                 if agent_name in results and results[agent_name].get('success', True):
                     combined_response_parts.append(f"{section_headers.get(agent_name, agent_name.upper())}\n{results[agent_name].get('response', 'No response')}")
@@ -296,12 +451,23 @@ class AgentOrchestrator:
             # Build final response
             combined_response = "\n\n".join(combined_response_parts)
 
-            # Add agent execution summary at the end
+            # Generate cross-agent insights if multiple domains analyzed
+            if len(agents_used) >= 2:
+                cross_insights = self._generate_cross_agent_insights(context_data, agents_used)
+                if cross_insights:
+                    combined_response += "\n\n" + "═"*60 + "\n"
+                    combined_response += "💡 **CROSS-DOMAIN INSIGHTS**\n"
+                    combined_response += "═"*60 + "\n"
+                    combined_response += cross_insights
+
+            # Add clean agent execution summary at the end
             agent_summary = "\n\n" + "─"*60 + "\n"
-            agent_summary += f"🤖 **Agents Executed:** {', '.join([a.capitalize() for a in agents_used])}\n"
+            agent_summary += f"🤖 **Agents:** {', '.join([a.capitalize() for a in agents_used])}"
+            agent_summary += f" | 📊 **Order:** {' → '.join([a.capitalize() for a in execution_order if a in agents_used])}"
             if agents_with_rag:
-                agent_summary += f"📚 **RAG Used By:** {', '.join([a.capitalize() for a in agents_with_rag])}\n"
-            agent_summary += "─"*60
+                agent_summary += f" | 📚 **RAG:** {', '.join([a.capitalize() for a in agents_with_rag])}"
+            # Metrics will be appended here by the query method
+            agent_summary += "\n" + "─"*60
 
             combined_response += agent_summary
 
@@ -323,6 +489,123 @@ class AgentOrchestrator:
                 'agent': 'Orchestrator',
                 'success': False
             }
+
+    def _extract_delay_rate(self, response: str) -> Optional[float]:
+        """Extract delay rate percentage from delay agent response"""
+        try:
+            import re
+            # Look for patterns like "6.28%" or "Delay Rate: 6.28%"
+            match = re.search(r'delay rate.*?(\d+\.\d+)%', response.lower())
+            if match:
+                return float(match.group(1))
+        except Exception as e:
+            logger.debug(f"Could not extract delay rate: {e}")
+        return None
+
+    def _extract_revenue_data(self, response: str) -> Optional[Dict]:
+        """Extract revenue metrics from analytics agent response"""
+        try:
+            import re
+            data = {}
+            # Look for revenue figures
+            revenue_match = re.search(r'revenue.*?\$?([\d,]+)', response.lower())
+            if revenue_match:
+                data['total_revenue'] = revenue_match.group(1)
+            return data if data else None
+        except Exception as e:
+            logger.debug(f"Could not extract revenue data: {e}")
+        return None
+
+    def _extract_forecast_trend(self, response: str) -> Optional[str]:
+        """Extract forecast trend from forecasting agent response"""
+        try:
+            response_lower = response.lower()
+            if 'increasing' in response_lower or 'growing' in response_lower or 'upward' in response_lower:
+                return 'increasing'
+            elif 'decreasing' in response_lower or 'declining' in response_lower or 'downward' in response_lower:
+                return 'decreasing'
+            elif 'stable' in response_lower or 'steady' in response_lower:
+                return 'stable'
+        except Exception as e:
+            logger.debug(f"Could not extract forecast trend: {e}")
+        return None
+
+    def _generate_cross_agent_insights(self, context_data: Dict, agents_used: List[str]) -> str:
+        """
+        Generate insights that span multiple agent domains
+
+        Args:
+            context_data: Extracted metrics from agent responses
+            agents_used: List of agents that were executed
+
+        Returns:
+            Cross-domain insights as formatted string
+        """
+        try:
+            insights = []
+
+            # Delay + Forecasting insight
+            if 'delay' in agents_used and 'forecasting' in agents_used:
+                delay_rate = context_data.get('delay_rate')
+                forecast_trend = context_data.get('forecast_trend')
+
+                if delay_rate and forecast_trend:
+                    if delay_rate > 10 and forecast_trend == 'increasing':
+                        insights.append(
+                            "⚠️ **Supply Chain Risk**: High delay rate combined with increasing demand "
+                            "may lead to customer dissatisfaction. Consider increasing safety stock or "
+                            "improving supplier performance."
+                        )
+                    elif delay_rate < 5 and forecast_trend == 'increasing':
+                        insights.append(
+                            "✅ **Growth Opportunity**: Excellent delivery performance with growing demand. "
+                            "Good position to capture market share. Monitor capacity for sustained performance."
+                        )
+                    elif delay_rate > 10 and forecast_trend == 'decreasing':
+                        insights.append(
+                            "📉 **Performance Issue**: High delays with declining demand may indicate "
+                            "operational inefficiencies. Focus on process improvement to retain customers."
+                        )
+
+            # Delay + Analytics insight
+            if 'delay' in agents_used and 'analytics' in agents_used:
+                delay_rate = context_data.get('delay_rate')
+                if delay_rate and delay_rate > 8:
+                    insights.append(
+                        "💰 **Revenue Impact**: Current delay rate may be affecting customer satisfaction "
+                        "and repeat purchase rates. Improving delivery performance could boost revenue."
+                    )
+
+            # Analytics + Forecasting insight
+            if 'analytics' in agents_used and 'forecasting' in agents_used:
+                forecast_trend = context_data.get('forecast_trend')
+                if forecast_trend == 'increasing':
+                    insights.append(
+                        "📈 **Inventory Planning**: Growing demand forecast suggests reviewing inventory "
+                        "levels and procurement schedules to avoid stockouts."
+                    )
+                elif forecast_trend == 'decreasing':
+                    insights.append(
+                        "📊 **Demand Planning**: Declining demand forecast indicates need to adjust "
+                        "inventory levels to avoid excess stock and optimize working capital."
+                    )
+
+            # Triple agent insight (Delay + Analytics + Forecasting)
+            if len(agents_used) >= 3 and 'delay' in agents_used and 'forecasting' in agents_used:
+                insights.append(
+                    "🔄 **Holistic View**: Analysis spans delivery performance, financial metrics, and "
+                    "demand forecasting. Use these combined insights for strategic planning and "
+                    "operational optimization."
+                )
+
+            if insights:
+                return "\n\n".join(insights)
+            else:
+                return ""
+
+        except Exception as e:
+            logger.error(f"Error generating cross-agent insights: {e}")
+            return ""
 
     def _handle_comprehensive_query(self, query: str) -> Dict[str, Any]:
         """Handle comprehensive queries that need multiple agents"""
@@ -362,34 +645,82 @@ class AgentOrchestrator:
                 'success': False
             }
 
-    def query(self, user_query: str, show_agent: bool = True) -> str:
+    def query(self, user_query: str, show_agent: bool = True, show_metrics: bool = True) -> str:
         """
         Main query interface - routes to appropriate agent and formats response
 
         Args:
             user_query: User's question
             show_agent: Whether to show agent info in response
+            show_metrics: Whether to show performance metrics
 
         Returns:
             Formatted response string
         """
+        # Import metrics tracker
+        try:
+            from metrics_tracker import get_metrics_tracker
+            metrics_tracker = get_metrics_tracker()
+        except:
+            metrics_tracker = None
+            show_metrics = False
+
+        # Start metrics tracking
+        query_id = None
+        start_time = time.time()
+        if metrics_tracker:
+            query_id = metrics_tracker.start_query(user_query, mode='agentic')
+            metrics_tracker.add_data_source(query_id, 'analytics_engine')
+
         try:
             # Route query
             result = self.route_query(user_query)
 
+            # Track agents and RAG usage
+            if metrics_tracker and query_id:
+                agents_used = result.get('agents_used', [result.get('agent', '')])
+                agents_with_rag = result.get('agents_with_rag', [])
+
+                for agent in agents_used:
+                    used_rag = agent in agents_with_rag or result.get('used_rag', False)
+                    metrics_tracker.add_agent_execution(query_id, agent, used_rag=used_rag)
+
+                if result.get('used_rag') or agents_with_rag:
+                    metrics_tracker.add_data_source(query_id, 'rag_documents')
+
             # Format response
             response_text = result.get('response', 'No response generated')
 
-            # Add agent info if requested
-            if show_agent:
+            # Calculate hallucination score
+            if metrics_tracker and query_id:
+                # Assume low hallucination since we're using grounded analytics
+                metrics_tracker.calculate_hallucination_score(query_id, response_text, ground_truth_data={'analytics': True})
+
+            # For multi-agent queries, skip duplicate agent info (already in response)
+            is_multi_agent = 'agents_used' in result and len(result.get('agents_used', [])) > 1
+
+            # Add agent info if requested (only for single-agent queries)
+            if show_agent and not is_multi_agent:
                 agent_info = self._build_agent_info(
                     agent=result.get('agent', 'Unknown'),
                     orchestrator=result.get('orchestrator', 'Unknown'),
                     intent=result.get('intent', {}),
                     success=result.get('success', True),
-                    result=result  # Pass full result for RAG and multi-agent info
+                    result=result
                 )
                 response_text += agent_info
+
+            # End metrics tracking and add metrics display
+            if metrics_tracker and query_id:
+                metrics_tracker.end_query(query_id, success=result.get('success', True))
+
+                if show_metrics:
+                    # Get the saved metrics
+                    recent = metrics_tracker.get_recent_metrics(limit=1)
+                    if recent:
+                        # Use compact format for all queries
+                        metrics_display = self._format_compact_metrics(recent[0], single_line=True)
+                        response_text += metrics_display
 
             return response_text
 
@@ -397,36 +728,72 @@ class AgentOrchestrator:
             logger.error(f"Error in orchestrator query: {e}")
             import traceback
             traceback.print_exc()
+
+            # End metrics tracking with error
+            if metrics_tracker and query_id:
+                metrics_tracker.end_query(query_id, success=False, error=str(e))
+
             return f"❌ Error processing your query: {str(e)}"
 
+    def _format_compact_metrics(self, metrics: Dict, single_line: bool = False) -> str:
+        """
+        Format compact metrics - only show fields with meaningful values
+
+        Args:
+            metrics: Metrics dictionary
+            single_line: If True, format as pipe-separated single line
+
+        Returns:
+            Formatted metrics string
+        """
+        parts = []
+
+        # Add latency (always show if available)
+        if metrics.get('latency_ms'):
+            parts.append(f"⏱️ {metrics['latency_ms']:.0f}ms")
+
+        # Add data sources (compact icons only, no label)
+        sources = metrics.get('data_sources_used', [])
+        if sources and len(sources) > 0:
+            source_icons = {
+                'analytics_engine': '📊',
+                'rag_documents': '📚'
+            }
+            source_str = ''.join([source_icons.get(s, '💾') for s in sources])
+            if source_str:
+                parts.append(source_str)
+
+        # Hallucination score - only show if Medium or High (Low is expected)
+        halluc_score = metrics.get('hallucination_score', 0)
+        if halluc_score >= 0.3:  # Only show if Medium or High
+            risk_level = "Medium" if halluc_score < 0.6 else "High"
+            parts.append(f"🎯 {risk_level}")
+
+        if parts:
+            separator = " | " if single_line else "\n"
+            return "\n" + separator.join(parts)
+        return ""
+
     def _build_agent_info(self, agent: str, orchestrator: str, intent: Dict, success: bool, result: Dict = None) -> str:
-        """Build agent execution info footer with RAG and multi-agent details"""
+        """Build compact agent execution info footer"""
         info = f"\n\n{'─' * 60}\n"
-        info += f"🤖 **Agent**: {agent}\n"
 
-        # Show individual agents if multi-agent query
-        if result and 'agents_used' in result:
-            agents_list = result['agents_used']
-            info += f"👥 **Agents Executed**: {', '.join([a.title() for a in agents_list])}\n"
+        # Extract agent name (remove mode suffix for cleaner display)
+        agent_name = agent.split(' (')[0] if '(' in agent else agent
 
-            # Show which agents used RAG
-            if 'agents_with_rag' in result and result['agents_with_rag']:
-                rag_agents = result['agents_with_rag']
-                info += f"📚 **RAG Used By**: {', '.join([a.title() for a in rag_agents])}\n"
-        elif result and result.get('used_rag', False):
-            # Single agent that used RAG
-            info += f"📚 **RAG**: Enabled (context retrieved from documents)\n"
+        # Build compact single-line summary
+        info += f"🤖 **Agent:** {agent_name}"
 
-        info += f"🎯 **Orchestrator**: {orchestrator}\n"
+        # Add RAG indicator if used
+        if result and result.get('used_rag', False):
+            info += " | 📚 **RAG**"
 
-        # Show intent details
-        if intent.get('multi_intent', False):
-            info += f"📊 **Intent**: Multi-Intent Query (agents: {', '.join(intent.get('agents', []))})\n"
-        else:
-            info += f"📊 **Intent**: {intent.get('agent', 'unknown').title()} (confidence: {intent.get('confidence', 0.0):.2f})\n"
+        # Add status
+        status_icon = "✅" if success else "❌"
+        info += f" | {status_icon} **{'Success' if success else 'Failed'}**"
 
-        info += f"✅ **Status**: {'Success' if success else 'Failed'}\n"
-        info += f"{'─' * 60}"
+        # Metrics will be appended on next line by query method
+        info += f"\n{'─' * 60}"
         return info
 
     def clear_history(self):

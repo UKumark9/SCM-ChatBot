@@ -45,11 +45,118 @@ class SCMAnalytics:
             
             logger.info(f"Delay analysis completed: {analysis['delay_rate_percentage']:.2f}% delay rate")
             return analysis
-            
+
         except Exception as e:
             logger.error(f"Error analyzing delivery delays: {str(e)}")
             raise
-    
+
+    def analyze_product_delays(self, product_id: Optional[str] = None, category: Optional[str] = None) -> Dict:
+       """Analyze delivery delays at product or category level"""
+       try:
+           logger.info(f"Analyzing product-level delivery delays (product_id={product_id}, category={category})...")
+
+           # Merge orders with order items and products
+           order_products = self.orders.merge(
+               self.order_items,
+               on='order_id',
+               how='inner'
+           ).merge(
+               self.products,
+               on='product_id',
+               how='left'
+           )
+
+           logger.info(f"Merged data has {len(order_products)} rows")
+
+           # Filter by product or category if specified
+           if product_id:
+               filtered_data = order_products[order_products['product_id'] == product_id]
+               filter_label = f"Product {product_id}"
+           elif category:
+               if 'product_category_name' in order_products.columns:
+                   filtered_data = order_products[order_products['product_category_name'] == category]
+                   filter_label = f"Category {category}"
+               else:
+                   return {"error": "Product category information not available"}
+           else:
+               filtered_data = order_products
+               filter_label = "All Products"
+
+           if len(filtered_data) == 0:
+               return {
+                   "error": f"No data found for {filter_label}",
+                   "filter": filter_label
+               }
+
+           # Calculate delays
+           delayed_orders = filtered_data[filtered_data['is_delayed'] == True]
+
+           analysis = {
+               "filter": filter_label,
+               "product_id": product_id,
+               "category": category,
+               "total_orders": len(filtered_data),
+               "delayed_orders": len(delayed_orders),
+               "delay_rate_percentage": (len(delayed_orders) / len(filtered_data)) * 100 if len(filtered_data) > 0 else 0,
+               "average_delay_days": float(delayed_orders['delay_days'].mean()) if len(delayed_orders) > 0 else 0,
+               "max_delay_days": float(delayed_orders['delay_days'].max()) if len(delayed_orders) > 0 else 0,
+               "median_delay_days": float(delayed_orders['delay_days'].median()) if len(delayed_orders) > 0 else 0
+           }
+
+           # If analyzing all products, add top delayed products/categories
+           if not product_id and not category:
+               # Top delayed products
+               logger.info("Calculating top delayed products...")
+               product_delays = order_products.groupby('product_id').agg({
+                   'is_delayed': ['sum', 'count', 'mean']
+               }).reset_index()
+
+               # Handle multi-level columns from groupby
+               product_delays.columns = ['product_id', 'delayed_count', 'total_count', 'delay_rate']
+
+               logger.info(f"Found {len(product_delays)} unique products")
+
+               # Filter products with minimum 5 orders
+               product_delays_filtered = product_delays[product_delays['total_count'] >= 5].copy()
+               logger.info(f"Products with 5+ orders: {len(product_delays_filtered)}")
+
+               # Sort by delay rate
+               product_delays_filtered = product_delays_filtered.sort_values('delay_rate', ascending=False)
+               top_delayed_products = product_delays_filtered.head(10)
+
+               logger.info(f"Top delayed products:\n{top_delayed_products}")
+               analysis['top_delayed_products'] = top_delayed_products.to_dict('records')
+
+               # Top delayed categories
+               if 'product_category_name' in order_products.columns:
+                   logger.info("Calculating top delayed categories...")
+                   category_delays = order_products.groupby('product_category_name').agg({
+                       'is_delayed': ['sum', 'count', 'mean']
+                   }).reset_index()
+
+                   category_delays.columns = ['category', 'delayed_count', 'total_count', 'delay_rate']
+
+                   # Filter categories with minimum 10 orders
+                   category_delays_filtered = category_delays[category_delays['total_count'] >= 10].copy()
+                   logger.info(f"Categories with 10+ orders: {len(category_delays_filtered)}")
+
+                   # Sort by delay rate
+                   category_delays_filtered = category_delays_filtered.sort_values('delay_rate', ascending=False)
+                   top_delayed_categories = category_delays_filtered.head(10)
+
+                   logger.info(f"Top delayed categories:\n{top_delayed_categories}")
+                   analysis['top_delayed_categories'] = top_delayed_categories.to_dict('records')
+
+           logger.info(f"Product delay analysis completed: {analysis['delay_rate_percentage']:.2f}% delay rate for {filter_label}")
+           return analysis
+
+       except Exception as e:
+           logger.error(f"Error analyzing product delays: {str(e)}", exc_info=True)
+           return {
+               "error": f"Error analyzing product delays: {str(e)}",
+               "filter": "All Products" if not product_id and not category else (product_id or category)
+           }
+        
     def analyze_revenue_trends(self) -> Dict:
         """Analyze revenue and sales trends"""
         try:

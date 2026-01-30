@@ -5,19 +5,27 @@
 
 ## (iii) ACKNOWLEDGEMENTS
 
-I would like to express my sincere gratitude to all those who have supported me throughout this research project.
+I would like to express my sincere gratitude to all those who have contributed to the successful completion of this dissertation work on Supply Chain Management Intelligent Chatbot System.
 
-First and foremost, I am deeply grateful to my project supervisor for their invaluable guidance, constructive feedback, and unwavering support throughout the development of this dissertation. Their expertise in artificial intelligence and supply chain management has been instrumental in shaping the direction of this research.
+First and foremost, I extend my heartfelt thanks to **[Head of Organization Name]**, Head of **[Organization Name]**, for providing me with the opportunity to undertake this research project and for creating an enabling environment conducive to innovation and learning.
 
-I would also like to thank the faculty members of the Department for their insightful lectures and discussions that provided the theoretical foundation for this work. Special thanks to the technical support staff who assisted with computational resources and infrastructure setup.
+I am profoundly grateful to my organizational supervisor, **[Supervisor Name]**, and Additional Examiner, **[Additional Examiner Name]**, for their invaluable guidance, expert insights, and continuous support throughout this project. Their deep knowledge of supply chain management and artificial intelligence systems has been instrumental in shaping the technical direction and practical applicability of this research. Their constructive feedback and encouragement during challenging phases of development were invaluable.
 
-My appreciation extends to my fellow students and colleagues who participated in testing the system and provided valuable feedback during the development phases. Their practical insights helped refine the user experience and identify real-world challenges.
+I would like to express my special appreciation to **[Professional Expert/Project In-charge Name]**, Professional Expert and In-charge of this project, for their hands-on guidance in the implementation phases, practical insights into real-world supply chain challenges, and support in navigating the technical complexities of multi-agent systems and retrieval-augmented generation frameworks.
 
-I am grateful to the open-source community, particularly the developers of LangChain, Sentence Transformers, FAISS, and Gradio, whose tools and libraries made this project possible. Their commitment to making advanced AI accessible has democratized innovation in this field.
+My sincere thanks to my faculty mentor, **[Faculty Mentor Name]**, BITS Pilani, for their academic guidance, theoretical insights, and meticulous review of this dissertation. Their expertise in advanced algorithms and machine learning provided the strong theoretical foundation necessary for this research.
 
-Finally, I want to thank my family and friends for their patience, encouragement, and moral support during the demanding periods of research and development. Their understanding when I was absorbed in debugging code or writing documentation meant more than they know.
+I am thankful to the IT infrastructure team at **[Organization Name]** for providing access to computational resources, cloud services, and development environments that made the implementation and testing of this system possible.
 
-This project stands on the shoulders of many, and I am truly thankful for all the support I have received.
+I would also like to acknowledge my colleagues and fellow WILP students who participated in user acceptance testing and provided valuable feedback during various stages of system development. Their practical perspectives helped identify edge cases and improve the overall user experience.
+
+My appreciation extends to the open-source community, particularly the developers and contributors of LangChain, Sentence Transformers, FAISS, Gradio, and other libraries that formed the technological foundation of this project. Their commitment to democratizing AI technology has been truly inspiring.
+
+Finally, I express my deepest gratitude to my family and friends for their unwavering support, patience, and understanding during the demanding periods of research, development, and documentation. Their encouragement and belief in my abilities kept me motivated throughout this journey.
+
+---
+
+**Note:** *Please replace the bracketed placeholders [Name] with actual names of individuals from your organization and academic institution.*
 
 ---
 
@@ -45,7 +53,38 @@ Future enhancements could include prescriptive analytics capabilities, real-time
 
 ---
 
-## (v) TABLE OF CONTENTS
+## (v) LIST OF ABBREVIATIONS
+
+| Abbreviation | Full Form |
+|--------------|-----------|
+| AI | Artificial Intelligence |
+| API | Application Programming Interface |
+| BITS | Birla Institute of Technology and Science |
+| CSV | Comma-Separated Values |
+| ERP | Enterprise Resource Planning |
+| FAISS | Facebook AI Similarity Search |
+| GPU | Graphics Processing Unit |
+| GUI | Graphical User Interface |
+| JSON | JavaScript Object Notation |
+| KPI | Key Performance Indicator |
+| LLM | Large Language Model |
+| MAPE | Mean Absolute Percentage Error |
+| ML | Machine Learning |
+| NLP | Natural Language Processing |
+| PDF | Portable Document Format |
+| RAG | Retrieval-Augmented Generation |
+| REST | Representational State Transfer |
+| SAP | Systems, Applications, and Products |
+| SCM | Supply Chain Management |
+| SDK | Software Development Kit |
+| SQL | Structured Query Language |
+| UI | User Interface |
+| UX | User Experience |
+| WILP | Work Integrated Learning Programmes |
+
+---
+
+## (vi) TABLE OF CONTENTS
 
 1. **INTRODUCTION** ............................................................. 1
    - 1.1 Background and Motivation ........................................... 1
