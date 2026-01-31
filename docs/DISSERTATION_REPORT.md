@@ -274,7 +274,22 @@ This work addresses a critical gap in enterprise decision support systems by com
 
 ---
 
-## (vi) INTRODUCTION
+## (vii) LIST OF FIGURES
+
+Figure 3.1: Multi-Agent System Architecture ................................. 19
+
+---
+
+## (viii) LIST OF TABLES
+
+Table 2.1: Evolution and Comparison of Chatbot Approaches .................. 9
+Table 3.1: Technology Stack Summary ........................................ 23
+Table 3.2: Functional Requirements Summary ................................. 18
+Table 3.3: Non-Functional Requirements Summary ............................. 19
+
+---
+
+## (ix) INTRODUCTION
 
 ### 1.1 Background and Motivation
 
@@ -603,7 +618,7 @@ Unlike earlier systems limited to predefined intents, LLMs can handle open-ended
 
 Businesses have begun deploying conversational AI for internal operations beyond customer-facing chatbots. Applications include HR systems where employees query benefits and policies, IT helpdesks providing troubleshooting guidance, and business intelligence interfaces allowing natural language data queries (Følstad et al., 2018).
 
-Research by Gartner (2022) predicted that by 2025, 70% of white-collar workers would interact with conversational platforms daily. The productivity benefits stem from reduced search time, democratized access to information, and elimination of interface learning curves associated with specialized software.
+Research by Gartner (2022) predicted that by 2025, 70% of white-collar workers would interact with conversational platforms daily. The productivity benefits stem from reduced search time, democratized access to information, and elimination of interface learning curves associated with specialized software. Table 2.1 provides a comprehensive comparison of different chatbot architectural approaches and their suitability for enterprise applications.
 
 **Challenges in Enterprise Deployment**
 
@@ -619,7 +634,24 @@ Despite their promise, LLM-based chatbots face specific challenges in enterprise
 
 5. **Cost and Latency:** API-based LLM services charge per token and introduce network latency. For high-frequency operational queries, costs can escalate quickly.
 
-These challenges motivate hybrid approaches that combine LLM capabilities with specialized components—exactly what the multi-agent architecture with RAG aims to achieve.
+**Table 2.1: Evolution and Comparison of Chatbot Approaches**
+
+| Characteristic | Rule-Based | ML-Based (Pre-LLM) | LLM-Based | Multi-Agent + RAG (This Work) |
+|----------------|------------|-------------------|-----------|-------------------------------|
+| **Natural Language Understanding** | Limited (keywords) | Good (intent classification) | Excellent (contextual) | Excellent (contextual + specialized) |
+| **Domain Knowledge** | Fixed rules | Trained on datasets | General knowledge | Specialized + organizational docs |
+| **Calculation Accuracy** | High (programmed) | Medium (learned) | Low (approximation) | High (dedicated analytics engine) |
+| **Explainability** | High (rules visible) | Low (black box) | Low (opaque reasoning) | Medium (agent routing visible) |
+| **Flexibility** | Low (hard-coded) | Medium (retraining needed) | High (zero-shot) | High (configurable agents) |
+| **Cost** | Low (one-time dev) | Medium (training + hosting) | High (per-token API) | Medium (selective LLM use) |
+| **Latency** | Very low (<100ms) | Low (<500ms) | Medium (1-3s) | Medium (2-7s depending on complexity) |
+| **Hallucination Risk** | None | Low | High | Low (grounded in data + docs) |
+| **Maintenance** | High (manual updates) | Medium (periodic retraining) | Low (API provider) | Medium (agent updates) |
+| **Deployment Complexity** | Low | Medium | Low (API-based) | Medium (multiple components) |
+
+*Table 2.1 compares chatbot architectural approaches across key dimensions relevant to enterprise supply chain applications. The multi-agent RAG approach (implemented in this research) combines strengths from multiple paradigms: the calculation accuracy of rule-based systems, the flexibility of LLMs, and the domain specificity of ML approaches, while mitigating hallucination risk through data grounding and document retrieval.*
+
+These challenges and trade-offs motivate hybrid approaches that combine LLM capabilities with specialized components—exactly what the multi-agent architecture with RAG aims to achieve.
 
 #### 2.3 Multi-Agent Systems
 
@@ -917,7 +949,7 @@ By addressing these gaps, the research contributes both theoretical understandin
 
 #### 3.1 Requirements Analysis
 
-The requirements for the SCM chatbot system emerged from analysis of supply chain user needs, organizational constraints, and technical feasibility. Requirements are categorized as functional (what the system must do) and non-functional (how the system must perform).
+The requirements for the SCM chatbot system emerged from analysis of supply chain user needs, organizational constraints, and technical feasibility. Requirements are categorized as functional (what the system must do, summarized in Table 3.2) and non-functional (how the system must perform, summarized in Table 3.3).
 
 ##### 3.1.1 Functional Requirements
 
@@ -992,6 +1024,23 @@ The requirements for the SCM chatbot system emerged from analysis of supply chai
 - The system shall provide logging of queries, responses, and system events
 - The system shall expose statistics about system usage and performance
 
+**Table 3.2: Functional Requirements Summary**
+
+| ID | Category | Key Capabilities | Priority |
+|----|----------|------------------|----------|
+| FR1 | Natural Language Interface | Conversational query processing, multi-turn dialogue | High |
+| FR2 | Multi-Agent Coordination | Intent detection, agent routing, multi-intent handling | High |
+| FR3 | Delivery Performance | Delay analysis, carrier performance, on-time metrics | High |
+| FR4 | Business Analytics | Revenue analysis, customer metrics, product performance | High |
+| FR5 | Demand Forecasting | Time-series forecasting, confidence intervals, multiple horizons | Medium |
+| FR6 | Data Query | Order/customer/product lookups, flexible search criteria | High |
+| FR7 | Document Management | Upload, text extraction, categorization, metadata storage | Medium |
+| FR8 | RAG Integration | Semantic search, context retrieval, document citation | Medium |
+| FR9 | Response Formatting | Structured output, metadata inclusion, error handling | Medium |
+| FR10 | Configuration | Data sources, operational modes, logging, statistics | Low |
+
+*Table 3.2 summarizes the ten functional requirement categories. High-priority requirements (FR1-FR4, FR6) focus on core analytical capabilities and natural language interaction. Medium-priority requirements (FR5, FR7-FR9) enhance the system with forecasting, document integration, and advanced features. Configuration capabilities (FR10) support deployment and operations.*
+
 ##### 3.1.2 Non-Functional Requirements
 
 **NFR1: Performance**
@@ -1064,11 +1113,28 @@ The requirements for the SCM chatbot system emerged from analysis of supply chai
 - The system shall allow configuration of analytical methods (forecasting algorithms, aggregation functions)
 - The system shall provide hooks for custom business logic and validation rules
 
-These requirements guided design decisions throughout the system development, with particular emphasis on balancing sophistication (multi-agent, RAG) with robustness (graceful degradation, multiple operational modes) to meet real-world deployment constraints.
+**Table 3.3: Non-Functional Requirements Summary**
+
+| ID | Category | Key Attributes | Target Metric |
+|----|----------|----------------|---------------|
+| NFR1 | Performance | Response time, throughput, caching | <3s (single), <7s (multi), 10+ concurrent users |
+| NFR2 | Availability | Graceful degradation, fault tolerance, status monitoring | 99%+ uptime, no single point of failure |
+| NFR3 | Accuracy | Calculation correctness, hallucination prevention, source citation | 100% metric accuracy, <5% hallucination rate |
+| NFR4 | Security & Privacy | Authentication, RBAC, audit logging, encryption | Full compliance with data protection standards |
+| NFR5 | Scalability | Horizontal scaling, data volume support, agent extensibility | 100K orders, 1K documents, unlimited agents |
+| NFR6 | Maintainability | Modular design, API documentation, logging, standards | Independent component updates, <1 day troubleshooting |
+| NFR7 | Usability | Browser access, helpful errors, examples, clear language | No special software, <5 min learning curve |
+| NFR8 | Interoperability | Multi-database support, standard formats, ERP integration | CSV, PostgreSQL, MySQL, MongoDB, REST APIs |
+| NFR9 | Cost Effectiveness | LLM cost optimization, open-source components, standard hardware | <$0.10/query, no GPU requirement |
+| NFR10 | Extensibility | Plugin architecture, multi-LLM support, configurable algorithms | New agent in <1 week, LLM swap in <1 day |
+
+*Table 3.3 summarizes non-functional requirements that shaped architectural decisions. Performance (NFR1) and availability (NFR2) ensure responsiveness and reliability. Accuracy (NFR3) addresses the hallucination problem through data grounding. Security (NFR4) enables enterprise deployment. Scalability (NFR5), maintainability (NFR6), and extensibility (NFR10) support long-term evolution. Usability (NFR7) democratizes access. Interoperability (NFR8) and cost effectiveness (NFR9) reduce deployment barriers.*
+
+These requirements (summarized in Tables 3.2 and 3.3) guided design decisions throughout the system development, with particular emphasis on balancing sophistication (multi-agent, RAG) with robustness (graceful degradation, multiple operational modes) to meet real-world deployment constraints.
 
 #### 3.2 System Architecture
 
-The SCM chatbot system employs a layered, modular architecture designed to separate concerns, enable independent development of components, and support multiple operational modes. The architecture can be conceptualized in five primary layers:
+The SCM chatbot system employs a layered, modular architecture designed to separate concerns, enable independent development of components, and support multiple operational modes. The architecture (illustrated in Figure 3.1) can be conceptualized in five primary layers:
 
 **1. Presentation Layer**
 **2. Orchestration Layer**
@@ -1076,7 +1142,9 @@ The SCM chatbot system employs a layered, modular architecture designed to separ
 **4. Knowledge Layer**
 **5. Data Layer**
 
-**Architectural Diagram:**
+**Figure 3.1: Multi-Agent System Architecture**
+
+This diagram illustrates the five-layered architecture of the SCM chatbot system, showing the interaction between the presentation layer, orchestration layer, specialized agents, knowledge management components, and data sources.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -1154,6 +1222,8 @@ The SCM chatbot system employs a layered, modular architecture designed to separ
 │        └────────────────────────────┘                          │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+*Figure 3.1 shows the comprehensive architecture with bidirectional data flow between layers. The orchestrator serves as the central intelligence, routing queries to specialized agents that leverage both the knowledge layer (for contextual information via RAG) and the data layer (for quantitative analytics). This modular design enables graceful degradation and independent component development.*
 
 **Layer Descriptions:**
 
@@ -1306,7 +1376,7 @@ This architecture successfully balances sophistication (multi-agent, RAG, LLM in
 
 #### 3.3 Technology Stack Selection
 
-Technology selection balanced several competing factors: functionality, maturity, cost, licensing, community support, and integration complexity. The selected stack emphasizes open-source components with permissive licenses to minimize deployment barriers.
+Technology selection balanced several competing factors: functionality, maturity, cost, licensing, community support, and integration complexity. The selected stack (summarized in Table 3.1) emphasizes open-source components with permissive licenses to minimize deployment barriers.
 
 **Programming Language: Python 3.8+**
 
@@ -1502,7 +1572,7 @@ _Rationale:_
 - Good integration with CI/CD pipelines
 - unittest for lightweight standard library option
 
-**Technology Stack Summary Table:**
+**Table 3.1: Technology Stack Summary**
 
 | Component       | Technology            | Version | License     | Rationale                      |
 | --------------- | --------------------- | ------- | ----------- | ------------------------------ |
@@ -1517,6 +1587,8 @@ _Rationale:_
 | Caching         | File/Redis            | -       | BSD/BSD     | Flexible deployment options    |
 | Logging         | Python logging        | Stdlib  | PSF         | Standard, reliable             |
 | Testing         | pytest                | Latest  | MIT         | Best-in-class Python testing   |
+
+*Table 3.1 summarizes the selected technologies across all system layers. The stack emphasizes open-source components with permissive licenses (MIT, Apache 2.0, BSD) to minimize deployment barriers while leveraging state-of-the-art capabilities from commercial LLM providers (OpenAI, Anthropic) for sophisticated reasoning tasks.*
 
 This stack provides a solid foundation for the multi-agent RAG system while maintaining flexibility for future enhancements and enterprise customization.
 
