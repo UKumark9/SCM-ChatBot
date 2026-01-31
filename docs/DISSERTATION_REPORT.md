@@ -1,4 +1,5 @@
 # Supply Chain Management Intelligent Chatbot System
+
 ## A Multi-Agent Retrieval-Augmented Generation Framework for Enterprise Decision Support
 
 ---
@@ -25,62 +26,160 @@ Finally, I express my deepest gratitude to my family and friends for their unwav
 
 ---
 
-**Note:** *Please replace the bracketed placeholders [Name] with actual names of individuals from your organization and academic institution.*
+**Note:** _Please replace the bracketed placeholders [Name] with actual names of individuals from your organization and academic institution._
 
 ---
 
-## (iv) ABSTRACT
+---
 
-**Keywords:** Multi-Agent Systems, Retrieval-Augmented Generation, Supply Chain Management, Natural Language Processing, Large Language Models, Vector Databases, Enterprise AI
+## (iv) ABSTRACT SHEET
 
-### Abstract
+### SUPPLY CHAIN MANAGEMENT INTELLIGENT CHATBOT SYSTEM
 
-Supply chain management faces increasing complexity as organizations deal with vast amounts of operational data scattered across multiple systems. Traditional business intelligence tools, while powerful, often require technical expertise and lack the conversational interface that modern users expect. This dissertation presents an intelligent chatbot system that bridges this gap by combining multi-agent architecture with retrieval-augmented generation (RAG) to provide natural language access to supply chain analytics.
+### A Multi-Agent Retrieval-Augmented Generation Framework for Enterprise Decision Supply
 
-The developed system employs four specialized AI agents—Delay Agent, Analytics Agent, Forecasting Agent, and Data Query Agent—each designed to handle specific aspects of supply chain operations. These agents are coordinated by an orchestrator that uses multi-intent detection to route user queries appropriately, even when questions involve multiple domains simultaneously. The system automatically integrates RAG capabilities, allowing agents to augment their analytical responses with relevant context from uploaded business documents such as policies, procedures, and historical reports.
+---
 
-The architecture implements a hybrid approach that combines rule-based analytics with large language model reasoning. When RAG dependencies are available, the system performs semantic search using FAISS vector databases and Sentence Transformers embeddings. When dependencies are missing, the system gracefully degrades to analytics-only mode, ensuring continuous operation without external AI services.
+#### **CANDIDATE DETAILS**
 
-Implementation results demonstrate the system's ability to handle complex, multi-intent queries like "What is the delivery delay rate? Forecast demand for 30 days" by automatically detecting and routing to multiple agents, combining their outputs into coherent responses. The RAG integration successfully retrieves relevant context from business documents, with an adjustable similarity threshold (currently 1.5) to balance precision and recall.
+| Field                   | Details                                   |
+| ----------------------- | ----------------------------------------- |
+| **Student Name**        | [Your Name]                               |
+| **Registration Number** | [Your Registration Number]                |
+| **Institution**         | BITS Pilani, Pilani Campus                |
+| **WILP Programme**      | Work Integrated Learning Programme        |
+| **Degree**              | M.Tech. / MSc.                            |
+| **Discipline**          | Computer Science / Information Technology |
+| **Submission Date**     | [Date of Submission]                      |
 
-The system has been validated through diagnostic testing, showing accurate multi-agent detection, successful RAG initialization, and proper context retrieval. Performance metrics indicate average query response times under 3 seconds for single-agent queries and under 7 seconds for multi-agent queries when using cached features. The modular architecture allows easy integration with enterprise systems like SAP, Oracle ERP, and Microsoft Dynamics through configurable data connectors.
+---
 
-This research contributes to the growing field of conversational AI for business applications by demonstrating how multi-agent systems and RAG can be effectively combined to provide both analytical precision and contextual awareness. The findings suggest that such hybrid approaches are particularly well-suited for supply chain environments where users need quick access to both quantitative metrics and qualitative policy information.
+#### **SUPERVISION DETAILS**
 
-Future enhancements could include prescriptive analytics capabilities, real-time data streaming, and expanded agent specializations for procurement, warehouse management, and supplier relationship management.
+| Field                             | Details                                |
+| --------------------------------- | -------------------------------------- |
+| **Organizational Supervisor**     | [Supervisor Name], [Organization Name] |
+| **Faculty Mentor**                | [Faculty Mentor Name], BITS Pilani     |
+| **Additional Examiner**           | [Additional Examiner Name]             |
+| **Professional Expert In-charge** | [Professional Expert Name]             |
 
-**Word Count:** 398
+---
+
+#### **PROJECT ABSTRACT**
+
+Supply chain management faces increasing complexity as organizations deal with vast amounts of operational data scattered across multiple systems. Decision-makers require quick access to analytical insights alongside contextual policy information, yet traditional business intelligence tools lack the natural language interface that modern users expect.
+
+This dissertation presents an intelligent chatbot system that leverages multi-agent architecture combined with retrieval-augmented generation (RAG) to provide conversational access to supply chain analytics. The system comprises four specialized AI agents—Delay Agent, Analytics Agent, Forecasting Agent, and Data Query Agent—each handling distinct aspects of supply chain operations. An intelligent orchestrator coordinates these agents using multi-intent detection, enabling the system to process complex queries that simultaneously touch multiple analytical domains.
+
+The architecture implements a hybrid approach that combines deterministic rule-based analytics with large language model reasoning. The system gracefully handles scenarios where RAG dependencies are unavailable, automatically degrading to analytics-only mode. When RAG is enabled, semantic search using FAISS vector databases and Sentence Transformers retrieves relevant context from business documents including policies, procedures, and historical reports.
+
+The implementation successfully demonstrates multi-agent coordination for complex queries such as "What is the delivery delay rate? Forecast demand for 30 days." The system automatically detects multiple intents, routes to appropriate agents, and synthesizes responses. Diagnostic validation confirms accurate multi-agent detection and context retrieval. Performance metrics show average response times under 3 seconds for single-agent queries and under 7 seconds for multi-agent scenarios with cached features.
+
+The contribution of this work lies in demonstrating effective integration of multi-agent systems with RAG technologies for enterprise applications. The modular architecture enables seamless integration with ERP systems including SAP, Oracle ERP, and Microsoft Dynamics through configurable data connectors. Results indicate that such hybrid approaches are particularly suited for supply chain environments requiring both quantitative metrics and qualitative contextual information.
+
+**Word Count:** 198 words
+
+---
+
+#### **PROJECT AREA**
+
+**Primary Area:** Artificial Intelligence & Natural Language Processing
+
+**Secondary Areas:**
+
+- Multi-Agent Systems Architecture
+- Information Retrieval & Augmented Generation
+- Supply Chain Analytics
+- Enterprise Systems Integration
+
+---
+
+#### **KEY WORDS**
+
+1. Multi-Agent Systems
+2. Retrieval-Augmented Generation (RAG)
+3. Supply Chain Management
+4. Natural Language Processing
+5. Large Language Models (LLM)
+6. Vector Databases
+7. Conversational AI
+8. Enterprise Analytics
+9. Intelligent Orchestration
+10. Business Process Automation
+
+**Additional Keywords:** Chatbot Design, Semantic Search, Query Routing, Intent Detection, Hybrid Architecture, Agent Coordination
+
+---
+
+#### **PROJECT CLASSIFICATION**
+
+| Criterion              | Classification                                        |
+| ---------------------- | ----------------------------------------------------- |
+| **Technology Domain**  | Artificial Intelligence, Software Engineering         |
+| **Application Area**   | Enterprise Systems, Business Intelligence             |
+| **Complexity Level**   | Advanced (Multi-component System)                     |
+| **Industry Relevance** | High (Applicable to Manufacturing, Logistics, Retail) |
+
+---
+
+#### **KEY ACCOMPLISHMENTS**
+
+1. **Multi-Agent Architecture:** Designed and implemented four specialized agents with coordinated orchestration for intelligent query routing
+
+2. **Hybrid Execution Modes:** Developed three execution modes (Multi-Agent, Enhanced LLM, Legacy Rule-Based) enabling operational flexibility
+
+3. **RAG Integration:** Implemented retrieval-augmented generation with semantic search capabilities for contextual information retrieval
+
+4. **Multi-Intent Detection:** Created intelligent system to identify and process queries spanning multiple analytical domains simultaneously
+
+5. **Enterprise Integration:** Developed configurable data connectors for integration with major ERP systems
+
+6. **Diagnostic Framework:** Built comprehensive diagnostic and validation tools for system verification
+
+7. **Graceful Degradation:** Implemented fallback mechanisms ensuring system functionality even when advanced dependencies are unavailable
+
+---
+
+#### **PROJECT SIGNIFICANCE**
+
+This work addresses a critical gap in enterprise decision support systems by combining conversational AI with analytical precision. As organizations increasingly rely on AI-driven insights, the ability to provide natural language access to complex analytical functions while maintaining accuracy is vital. The multi-agent approach demonstrates how specialized components can be coordinated to handle the multifaceted nature of supply chain management, providing a blueprint applicable to other enterprise domains.
+
+---
+
+**Prepared by:** [Your Name]  
+**Date:** [Date]  
+**Approved by:** [Faculty Mentor Name]
 
 ---
 
 ## (v) LIST OF ABBREVIATIONS
 
-| Abbreviation | Full Form |
-|--------------|-----------|
-| AI | Artificial Intelligence |
-| API | Application Programming Interface |
-| BITS | Birla Institute of Technology and Science |
-| CSV | Comma-Separated Values |
-| ERP | Enterprise Resource Planning |
-| FAISS | Facebook AI Similarity Search |
-| GPU | Graphics Processing Unit |
-| GUI | Graphical User Interface |
-| JSON | JavaScript Object Notation |
-| KPI | Key Performance Indicator |
-| LLM | Large Language Model |
-| MAPE | Mean Absolute Percentage Error |
-| ML | Machine Learning |
-| NLP | Natural Language Processing |
-| PDF | Portable Document Format |
-| RAG | Retrieval-Augmented Generation |
-| REST | Representational State Transfer |
-| SAP | Systems, Applications, and Products |
-| SCM | Supply Chain Management |
-| SDK | Software Development Kit |
-| SQL | Structured Query Language |
-| UI | User Interface |
-| UX | User Experience |
-| WILP | Work Integrated Learning Programmes |
+| Abbreviation | Full Form                                 |
+| ------------ | ----------------------------------------- |
+| AI           | Artificial Intelligence                   |
+| API          | Application Programming Interface         |
+| BITS         | Birla Institute of Technology and Science |
+| CSV          | Comma-Separated Values                    |
+| ERP          | Enterprise Resource Planning              |
+| FAISS        | Facebook AI Similarity Search             |
+| GPU          | Graphics Processing Unit                  |
+| GUI          | Graphical User Interface                  |
+| JSON         | JavaScript Object Notation                |
+| KPI          | Key Performance Indicator                 |
+| LLM          | Large Language Model                      |
+| MAPE         | Mean Absolute Percentage Error            |
+| ML           | Machine Learning                          |
+| NLP          | Natural Language Processing               |
+| PDF          | Portable Document Format                  |
+| RAG          | Retrieval-Augmented Generation            |
+| REST         | Representational State Transfer           |
+| SAP          | Systems, Applications, and Products       |
+| SCM          | Supply Chain Management                   |
+| SDK          | Software Development Kit                  |
+| SQL          | Structured Query Language                 |
+| UI           | User Interface                            |
+| UX           | User Experience                           |
+| WILP         | Work Integrated Learning Programmes       |
 
 ---
 
@@ -224,6 +323,7 @@ Building custom interfaces for every type of analysis doesn't scale. As business
 The core problem is that despite having abundant supply chain data and powerful analytical tools, organizations struggle to provide their users with a unified, accessible, context-aware interface for decision support. Users face high friction when trying to answer even straightforward questions, leading to delayed decisions, reliance on intuition over data, and underutilization of available information assets.
 
 This dissertation addresses this problem by developing an intelligent multi-agent chatbot system that:
+
 - Provides natural language access to supply chain analytics
 - Handles multi-intent queries spanning different domains
 - Automatically augments responses with relevant document context
@@ -295,6 +395,7 @@ By achieving these objectives, the research contributes both theoretical underst
 This research encompasses the following areas:
 
 **Technical Scope:**
+
 - Multi-agent system architecture for supply chain analytics
 - Natural language processing for query understanding and intent classification
 - Retrieval-augmented generation using vector databases and semantic search
@@ -304,6 +405,7 @@ This research encompasses the following areas:
 - Deployment on local/on-premises infrastructure
 
 **Functional Scope:**
+
 - Delivery performance analysis (delay rates, on-time metrics, carrier performance)
 - Business analytics (revenue, sales, customer behavior, product performance)
 - Demand forecasting (30/60/90-day predictions, trend analysis)
@@ -313,6 +415,7 @@ This research encompasses the following areas:
 - Response visualization and formatting
 
 **Domain Scope:**
+
 - E-commerce and retail supply chains
 - Order-to-delivery logistics processes
 - Customer-centric metrics and analytics
@@ -410,20 +513,24 @@ Defines technical terms, acronyms, and domain-specific terminology used througho
 **Reading Guide:**
 
 For readers primarily interested in understanding what the system does and how it performs:
+
 - Focus on Chapters 1, 3, 6, and 8
 - Skim Chapter 4 for architectural overview
 - Review Appendix F for sample outputs
 
 For technical readers seeking implementation details:
+
 - Read Chapters 3, 4, and 5 thoroughly
 - Examine Appendices A, B, and E for technical specifications
 - Review Chapter 7 for deployment considerations
 
 For academic researchers:
+
 - Study Chapters 2, 5, 6, and 8 for research methodology and contributions
 - Review Chapter 10 for related work and theoretical foundations
 
 For business stakeholders evaluating feasibility:
+
 - Focus on Chapters 1, 6, 7, and 8
 - Review Section 7.5 for cost-benefit analysis
 - Examine Section 6.4 for application scenarios
@@ -523,6 +630,7 @@ Multi-agent systems (MAS) provide an architectural pattern where multiple autono
 Multi-agent systems emerged from distributed artificial intelligence research in the 1980s and 1990s. The core insight is that complex domains often benefit from decomposition into specialized sub-problems handled by focused agents rather than monolithic systems attempting to do everything (Wooldridge, 2009).
 
 Key principles include:
+
 - **Autonomy:** Each agent controls its own behavior and decision-making
 - **Specialization:** Agents develop expertise in specific domains
 - **Coordination:** Agents communicate and collaborate to achieve system-level goals
@@ -589,10 +697,12 @@ Retrieval-Augmented Generation (RAG) represents a paradigm for enhancing languag
 The RAG approach, formalized by Lewis et al. (2020), addresses a fundamental limitation of language models: their knowledge is frozen at training time and limited to what appeared in training data. Models can't access proprietary organizational information, recent events, or specialized domain knowledge unless specifically fine-tuned.
 
 RAG solves this by decomposing generation into two steps:
+
 1. **Retrieval:** Given a query, search a knowledge base to find relevant documents or passages
 2. **Augmented Generation:** Provide retrieved content as context to the language model, which generates a response grounded in that information
 
 This architecture offers several advantages:
+
 - **Dynamic Knowledge:** The knowledge base can be updated without retraining the model
 - **Transparency:** Retrieved sources can be cited, providing evidence for claims
 - **Reduced Hallucination:** Grounding in retrieved facts constrains the model's tendency to fabricate information
@@ -610,12 +720,14 @@ Text chunks are converted to dense vector representations using embedding models
 
 **3. Vector Databases:**
 Embedded documents are stored in specialized vector databases optimized for similarity search. FAISS (Johnson et al., 2019), Pinecone, Weaviate, and Milvus provide efficient nearest-neighbor search across millions or billions of vectors. Key operations include:
+
 - **Indexing:** Building data structures (like inverted file systems or hierarchical navigable small worlds graphs) that enable fast search
 - **Querying:** Converting the user's question to a vector and finding top-k most similar document vectors
 - **Filtering:** Applying metadata filters (date ranges, document types, access permissions) to constrain search
 
 **4. Retrieval Strategies:**
 Beyond simple similarity search, advanced retrieval employs:
+
 - **Hybrid Search:** Combining semantic similarity with keyword matching (BM25) to balance neural and symbolic approaches
 - **Re-ranking:** Using more sophisticated models to refine initial retrieval results
 - **Query Expansion:** Reformulating the user query or generating multiple query variants
@@ -623,6 +735,7 @@ Beyond simple similarity search, advanced retrieval employs:
 
 **5. Context Integration:**
 Retrieved documents must be formatted and injected into the language model's prompt. Strategies include:
+
 - **Prepending Context:** Placing retrieved text before the user query
 - **Interleaving:** Alternating between retrieved passages and query components
 - **Structured Prompts:** Using XML-like tags or markdown formatting to distinguish context from queries
@@ -715,12 +828,14 @@ LLMs can perpetuate biases present in training data, potentially leading to disc
 **Cost Management**
 
 LLM usage costs can escalate quickly:
+
 - API services charge per token (input + output)
 - Complex queries with large contexts incur higher costs
 - High query volumes multiply expenses
 - Fine-tuning adds additional charges
 
 Cost-effective deployment strategies include:
+
 - **Caching:** Storing responses to common queries
 - **Model Selection:** Using smaller, cheaper models for simple tasks
 - **Hybrid Approaches:** Reserving LLMs for complex queries while handling simple ones with rule-based systems
@@ -745,6 +860,7 @@ API failures, rate limits, and timeouts require robust error handling, retry log
 **Success Factors**
 
 Research on enterprise LLM deployments identifies several success factors:
+
 - **Clear Use Cases:** Starting with well-defined problems rather than seeking problems for the technology
 - **Human-in-the-Loop:** Maintaining human oversight for critical decisions rather than full automation
 - **Iterative Development:** Rapid prototyping with user feedback rather than extensive upfront design
@@ -806,42 +922,49 @@ The requirements for the SCM chatbot system emerged from analysis of supply chai
 ##### 3.1.1 Functional Requirements
 
 **FR1: Natural Language Query Processing**
+
 - The system shall accept user queries expressed in natural language without requiring structured query syntax
 - The system shall understand supply chain domain terminology (delays, shipments, SKUs, carriers, forecast, demand, revenue, etc.)
 - The system shall extract relevant entities (dates, locations, product names, customer IDs) from queries
 - The system shall handle spelling variations and synonyms common in supply chain contexts
 
 **FR2: Multi-Intent Query Handling**
+
 - The system shall detect when a single query involves multiple analytical domains (e.g., delays + forecasting)
 - The system shall route compound queries to all relevant agents
 - The system shall combine outputs from multiple agents into a coherent response
 - The system shall indicate which agents were invoked to answer the query
 
 **FR3: Delivery Performance Analysis**
+
 - The system shall provide delivery delay rates, on-time performance, and average delay duration
 - The system shall analyze delays by carrier, region, product category, and time period
 - The system shall identify patterns in delivery performance
 - The system shall support both aggregate statistics and individual order lookups
 
 **FR4: Business Analytics**
+
 - The system shall provide revenue analysis by time period, product, customer, and region
 - The system shall calculate customer lifetime value and segmentation metrics
 - The system shall analyze product performance including sales velocity and profitability
 - The system shall identify trends and anomalies in business metrics
 
 **FR5: Demand Forecasting**
+
 - The system shall generate demand forecasts for configurable time horizons (30/60/90 days)
 - The system shall provide forecasts at different granularities (total, by category, by product)
 - The system shall include confidence intervals or uncertainty estimates
 - The system shall explain the forecasting methodology used
 
 **FR6: Data Query Capabilities**
+
 - The system shall support lookups of specific orders, customers, products, and shipments
 - The system shall search across data fields using flexible criteria
 - The system shall return structured data with relevant attributes
 - The system shall handle cases where requested records don't exist
 
 **FR7: Document Management**
+
 - The system shall allow users to upload documents (PDF, DOCX, TXT, MD formats)
 - The system shall extract text content from uploaded documents
 - The system shall categorize documents by type (policy, procedure, guide, contract, etc.)
@@ -849,18 +972,21 @@ The requirements for the SCM chatbot system emerged from analysis of supply chai
 - The system shall provide document listing and search capabilities
 
 **FR8: Retrieval-Augmented Generation**
+
 - The system shall automatically search uploaded documents for context relevant to user queries
 - The system shall integrate retrieved context into agent responses when relevant
 - The system shall indicate when RAG was used and what documents contributed to the response
 - The system shall support configurable similarity thresholds for context retrieval
 
 **FR9: Response Formatting and Presentation**
+
 - The system shall format responses with appropriate structure (headers, lists, tables where applicable)
 - The system shall include metadata about query processing (agent used, RAG status, processing time)
 - The system shall provide error messages when queries cannot be answered
 - The system shall suggest alternative phrasings for ambiguous or unanswerable queries
 
 **FR10: Configuration and Administration**
+
 - The system shall support configuration of data sources (database connections, file paths)
 - The system shall allow configuration of operational modes (agentic, enhanced, legacy)
 - The system shall provide logging of queries, responses, and system events
@@ -869,24 +995,28 @@ The requirements for the SCM chatbot system emerged from analysis of supply chai
 ##### 3.1.2 Non-Functional Requirements
 
 **NFR1: Performance**
+
 - The system shall respond to single-intent queries within 3 seconds under normal load
 - The system shall respond to multi-intent queries within 7 seconds under normal load
 - The system shall support at least 10 concurrent users without degradation
 - The system shall leverage feature caching to accelerate repeated analytical queries
 
 **NFR2: Availability**
+
 - The system shall maintain functionality even when external LLM APIs are unavailable (graceful degradation to rule-based mode)
 - The system shall continue operating without RAG when vector database dependencies are missing
 - The system shall recover from individual agent failures without crashing the entire system
 - The system shall provide clear status indicators for operational mode and component health
 
 **NFR3: Accuracy**
+
 - The system shall produce analytically correct metrics (delay rates, revenue totals, etc.) matching direct database queries
 - The system shall indicate confidence levels for forecasts and estimates
 - The system shall avoid hallucinating data not present in source systems
 - The system shall cite sources when providing information from documents
 
 **NFR4: Security and Privacy**
+
 - The system shall implement authentication for user access
 - The system shall support role-based access control for sensitive data
 - The system shall log all queries for audit purposes
@@ -894,35 +1024,41 @@ The requirements for the SCM chatbot system emerged from analysis of supply chai
 - The system shall encrypt data at rest for uploaded documents
 
 **NFR5: Scalability**
+
 - The system architecture shall support adding new specialized agents without redesigning core components
 - The system shall handle data volumes up to 100,000 orders and 1,000 uploaded documents with acceptable performance
 - The system shall support horizontal scaling of compute-intensive components (embedding generation, vector search)
 
 **NFR6: Maintainability**
+
 - The system shall use modular architecture allowing independent development and testing of agents
 - The system shall document APIs and interfaces for each component
 - The system shall use consistent coding standards and naming conventions
 - The system shall include comprehensive logging for troubleshooting
 
 **NFR7: Usability**
+
 - The system interface shall be accessible through standard web browsers without special plugins
 - The system shall provide helpful error messages that guide users toward successful queries
 - The system shall include example queries and documentation within the interface
 - The system shall respond in clear, business-appropriate language avoiding excessive technical jargon
 
 **NFR8: Interoperability**
+
 - The system shall support data ingestion from CSV files, PostgreSQL, MySQL, and MongoDB
 - The system shall provide APIs for integration with external systems
 - The system shall use standard data formats (JSON, CSV) for import/export
 - The system shall document procedures for connecting to ERP and WMS systems
 
 **NFR9: Cost Effectiveness**
+
 - The system shall minimize LLM API costs through intelligent caching and selective usage
 - The system shall use open-source components where feasible to reduce licensing costs
 - The system shall provide cost visibility through usage tracking and reporting
 - The system shall support deployment on standard hardware without specialized accelerators
 
 **NFR10: Extensibility**
+
 - The system architecture shall accommodate future additions like prescriptive analytics
 - The system shall support multiple LLM providers through abstraction layers
 - The system shall allow configuration of analytical methods (forecasting algorithms, aggregation functions)
@@ -1023,6 +1159,7 @@ The SCM chatbot system employs a layered, modular architecture designed to separ
 
 **Presentation Layer:**
 The presentation layer provides the user interface through Gradio, a Python library for building web-based interfaces. It consists of three main tabs:
+
 - **Chat Interface:** Primary interaction point where users submit queries and view responses
 - **Document Upload:** Interface for uploading business documents (policies, procedures, reports)
 - **Statistics:** Display of system metrics and usage statistics
@@ -1046,30 +1183,35 @@ The orchestrator also maintains state for conversation history (future enhanceme
 Four specialized agents handle different supply chain analytical domains:
 
 **Delay Agent:**
+
 - Calculates delivery delay rates and on-time performance
 - Analyzes delays by carrier, region, product category, time period
 - Identifies worst-performing carriers and routes
 - Provides recommendations for delivery performance improvement
 
 **Analytics Agent:**
+
 - Computes revenue metrics (total, by period, by segment)
 - Performs customer analysis (lifetime value, segmentation, behavior)
 - Analyzes product performance (sales velocity, profitability, popularity)
 - Identifies trends and anomalies in business metrics
 
 **Forecasting Agent:**
+
 - Generates demand forecasts for configurable horizons (30/60/90 days)
 - Produces forecasts at various granularities (total, category, product)
 - Applies exponential smoothing and trend analysis
 - Provides forecast confidence intervals
 
 **Data Query Agent:**
+
 - Looks up specific orders, customers, products, shipments
 - Searches across data fields with flexible criteria
 - Returns detailed records with all relevant attributes
 - Handles edge cases (non-existent records, ambiguous queries)
 
 Each agent can operate in multiple modes:
+
 - **LangChain Mode:** Uses LLM with LangChain tools for sophisticated reasoning
 - **LLM-Enhanced Mode:** Uses LLM for interpretation but relies on analytics engine for calculations
 - **Rule-Based Mode:** Uses keyword matching and predefined templates when LLM unavailable
@@ -1080,12 +1222,14 @@ All agents automatically integrate with the RAG module, retrieving relevant docu
 The knowledge layer manages unstructured information:
 
 **Document Manager:**
+
 - Handles document uploads and stores files in designated directory
 - Extracts text from PDFs, DOCX, TXT, and MD files
 - Maintains metadata database (JSON file) with document information
 - Triggers vectorization when new documents are uploaded
 
 **RAG Module:**
+
 - **Document Processor:** Chunks documents into passages suitable for embedding
 - **Vector Database:** Uses FAISS for efficient similarity search across embedded passages
 - **Embedding Model:** Sentence-Transformers (all-MiniLM-L6-v2) converts text to 384-dimensional vectors
@@ -1099,6 +1243,7 @@ The data layer provides access to operational data:
 
 **Analytics Engine:**
 Core component that performs calculations:
+
 - Loads data from configured sources
 - Computes delay metrics, revenue statistics, forecasts
 - Caches results for performance
@@ -1106,6 +1251,7 @@ Core component that performs calculations:
 
 **Feature Store:**
 Caching layer that stores computed features:
+
 - Configurable TTL (time-to-live) for cache invalidation
 - File-based or Redis backend options
 - Reduces redundant computation for frequently requested metrics
@@ -1113,6 +1259,7 @@ Caching layer that stores computed features:
 
 **Data Connectors:**
 Abstraction layer supporting multiple data sources:
+
 - **CSV Connector:** Reads from local CSV files (development/demo mode)
 - **PostgreSQL Connector:** Connects to PostgreSQL databases
 - **MySQL Connector:** Connects to MySQL databases
@@ -1132,6 +1279,7 @@ Components interact through well-defined interfaces. New agents can be added by 
 
 **3. Graceful Degradation:**
 The system functions at multiple levels of sophistication:
+
 - Ideal: LLMs + RAG + Feature Store
 - Degraded: Rule-based + Analytics Engine (no external dependencies)
 - Minimal: Static responses indicating system limitations
@@ -1140,6 +1288,7 @@ This ensures availability even when external services fail.
 
 **4. Performance Optimization:**
 Multiple mechanisms optimize performance:
+
 - Feature caching reduces redundant computation
 - Vector index pre-building accelerates RAG retrieval
 - Parallel agent invocation for multi-intent queries
@@ -1147,6 +1296,7 @@ Multiple mechanisms optimize performance:
 
 **5. Extensibility:**
 The architecture anticipates evolution:
+
 - Agent interface supports additional specialized agents
 - RAG module can integrate with different vector databases
 - LLM client abstracts away specific API providers
@@ -1160,152 +1310,175 @@ Technology selection balanced several competing factors: functionality, maturity
 
 **Programming Language: Python 3.8+**
 
-*Rationale:*
+_Rationale:_
+
 - Rich ecosystem for AI/ML libraries (LangChain, Sentence Transformers, FAISS)
 - Extensive data processing tools (Pandas, NumPy)
 - Strong web framework options (Gradio)
 - High developer productivity and readability
 - Widespread adoption in data science and AI communities
 
-*Alternatives Considered:*
+_Alternatives Considered:_
+
 - **JavaScript/Node.js:** Better for real-time web applications but weaker AI/ML ecosystem
 - **Java:** Enterprise-friendly with good performance but more verbose, steeper learning curve
 - **R:** Strong statistical capabilities but less suitable for production systems
 
 **Web Interface: Gradio 4.x**
 
-*Rationale:*
+_Rationale:_
+
 - Rapid development of ML/AI interfaces with minimal frontend code
 - Built-in components for chat interfaces, file uploads, and data display
 - Automatic API generation for integration
 - Easy deployment and sharing
 - No frontend JavaScript knowledge required
 
-*Alternatives Considered:*
+_Alternatives Considered:_
+
 - **Streamlit:** Similar simplicity but less suited for conversational interfaces
 - **Flask + React:** Maximum flexibility but significantly more development effort
 - **FastAPI + Vue:** Modern stack but requires frontend expertise
 
 **LLM Integration: LangChain 0.1.x**
 
-*Rationale:*
+_Rationale:_
+
 - Comprehensive framework for LLM application development
 - Built-in abstractions for tools, agents, and chains
 - Support for multiple LLM providers (OpenAI, Anthropic, HuggingFace)
 - Active development and strong community
 - Extensive documentation and examples
 
-*Alternatives Considered:*
+_Alternatives Considered:_
+
 - **Direct API Calls:** Maximum control but requires reimplementing common patterns
 - **LlamaIndex:** Strong for RAG but less comprehensive for agent frameworks
 - **Haystack:** Good for search but less focused on conversational AI
 
 **LLM Providers: OpenAI GPT-4 / Anthropic Claude**
 
-*Rationale:*
+_Rationale:_
+
 - State-of-the-art reasoning and generation capabilities
 - Strong performance on business and analytical queries
 - Reliable APIs with good documentation
 - Reasonable pricing for prototype and moderate production use
 - Function calling capabilities for tool integration
 
-*Alternatives Considered:*
+_Alternatives Considered:_
+
 - **Open-source LLMs (LLaMA, Mistral):** No API costs but require self-hosting infrastructure
 - **Azure OpenAI:** Enterprise compliance but more complex setup
 - **Google PaLM:** Competitive quality but less mature tooling integration
 
 **Embedding Model: Sentence-Transformers (all-MiniLM-L6-v2)**
 
-*Rationale:*
+_Rationale:_
+
 - Optimized for semantic similarity tasks
 - Lightweight (384 dimensions) enabling fast search
 - Can run on CPU without specialized hardware
 - Pre-trained on diverse text corpus
 - Compatible with FAISS and other vector databases
 
-*Alternatives Considered:*
+_Alternatives Considered:_
+
 - **OpenAI Embeddings:** Higher quality but API costs for every embedding
 - **Larger Sentence-BERT models:** Better quality but slower and more memory-intensive
 - **Domain-specific embeddings:** Potential quality improvement but training complexity
 
 **Vector Database: FAISS (Facebook AI Similarity Search)**
 
-*Rationale:*
+_Rationale:_
+
 - Highly optimized for similarity search
 - Supports billions of vectors efficiently
 - Can run in-memory or on-disk
 - Open-source with permissive license
 - Mature and well-tested
 
-*Alternatives Considered:*
+_Alternatives Considered:_
+
 - **Pinecone/Weaviate:** Managed vector databases with good features but ongoing costs
 - **Elasticsearch:** Familiar infrastructure but less optimized for dense vectors
 - **Chromadb:** Simpler API but less mature for production
 
 **Data Processing: Pandas + NumPy**
 
-*Rationale:*
+_Rationale:_
+
 - Industry-standard tools for tabular data manipulation
 - Excellent performance for datasets up to millions of rows
 - Rich functionality for aggregations, filtering, joins
 - Well-documented with extensive Stack Overflow support
 
-*Alternatives Considered:*
+_Alternatives Considered:_
+
 - **Dask:** Better for distributed processing but added complexity for moderate data
 - **Polars:** Faster than Pandas but less mature ecosystem
 - **SQL-only:** More efficient for some queries but less flexible for complex analytics
 
 **Database Connectors: SQLAlchemy + PyMongo**
 
-*Rationale:*
+_Rationale:_
+
 - SQLAlchemy provides unified interface for relational databases (PostgreSQL, MySQL, SQLite)
 - PyMongo for MongoDB document stores
 - Well-maintained and widely adopted
 - Support for connection pooling and ORM if needed
 
-*Alternatives Considered:*
+_Alternatives Considered:_
+
 - **Direct database drivers:** Less abstraction overhead but more code duplication
 - **Django ORM:** Full-featured but brings unnecessary web framework dependencies
 
 **Caching: File-based + Redis (optional)**
 
-*Rationale:*
+_Rationale:_
+
 - File-based caching (pickle) requires no infrastructure, suitable for single-instance deployments
 - Redis option available for distributed deployments
 - Both approaches use same interface (feature store abstraction)
 
-*Alternatives Considered:*
+_Alternatives Considered:_
+
 - **Memcached:** Good for simple caching but Redis offers richer data structures
 - **Database caching:** Simpler infrastructure but slower retrieval
 
 **Logging: Python logging module + structured logs**
 
-*Rationale:*
+_Rationale:_
+
 - Built into Python standard library
 - Configurable log levels and handlers
 - Supports structured logging for machine-readable logs
 - Can route logs to files, console, or external services
 
-*Alternatives Considered:*
+_Alternatives Considered:_
+
 - **Loguru:** Nicer API but external dependency for marginal benefit
 - **Centralized logging (ELK stack):** Enterprise-grade but complex for development
 
 **Deployment: Standard Python environment**
 
-*Rationale:*
+_Rationale:_
+
 - Can run on Linux, Windows, or macOS
 - Standard pip requirements.txt for dependency management
 - No containerization required (though supported)
 - Compatible with various hosting options (on-premises, cloud VMs, containers)
 
-*Alternatives Considered:*
+_Alternatives Considered:_
+
 - **Docker containers:** Better isolation but adds deployment complexity
 - **Kubernetes:** Enterprise orchestration but overkill for initial deployments
 - **Serverless:** Cost-effective for sporadic use but cold start latency issues
 
 **Version Control: Git + GitHub**
 
-*Rationale:*
+_Rationale:_
+
 - Industry standard for code versioning
 - Facilitates collaboration and code review
 - Integrated CI/CD options
@@ -1313,7 +1486,8 @@ Technology selection balanced several competing factors: functionality, maturity
 
 **Development Environment: VS Code / PyCharm**
 
-*Rationale:*
+_Rationale:_
+
 - Excellent Python support
 - Integrated debugging and testing
 - Extensions for linting, formatting
@@ -1321,7 +1495,8 @@ Technology selection balanced several competing factors: functionality, maturity
 
 **Testing: pytest + unittest**
 
-*Rationale:*
+_Rationale:_
+
 - pytest is the de facto Python testing standard
 - Rich fixture system and plugins
 - Good integration with CI/CD pipelines
@@ -1329,25 +1504,24 @@ Technology selection balanced several competing factors: functionality, maturity
 
 **Technology Stack Summary Table:**
 
-| Component | Technology | Version | License | Rationale |
-|-----------|-----------|---------|---------|-----------|
-| Language | Python | 3.8+ | PSF | Rich AI/ML ecosystem |
-| Web UI | Gradio | 4.x | Apache 2.0 | Rapid ML interface development |
-| LLM Framework | LangChain | 0.1.x | MIT | Comprehensive LLM tools |
-| LLM API | OpenAI/Anthropic | Latest | Proprietary | SOTA capabilities |
-| Embeddings | Sentence-Transformers | Latest | Apache 2.0 | Optimized semantic search |
-| Vector DB | FAISS | Latest | MIT | Fast similarity search |
-| Data Processing | Pandas/NumPy | Latest | BSD | Standard data tools |
-| DB Connectors | SQLAlchemy/PyMongo | Latest | MIT | Multi-database support |
-| Caching | File/Redis | - | BSD/BSD | Flexible deployment options |
-| Logging | Python logging | Stdlib | PSF | Standard, reliable |
-| Testing | pytest | Latest | MIT | Best-in-class Python testing |
+| Component       | Technology            | Version | License     | Rationale                      |
+| --------------- | --------------------- | ------- | ----------- | ------------------------------ |
+| Language        | Python                | 3.8+    | PSF         | Rich AI/ML ecosystem           |
+| Web UI          | Gradio                | 4.x     | Apache 2.0  | Rapid ML interface development |
+| LLM Framework   | LangChain             | 0.1.x   | MIT         | Comprehensive LLM tools        |
+| LLM API         | OpenAI/Anthropic      | Latest  | Proprietary | SOTA capabilities              |
+| Embeddings      | Sentence-Transformers | Latest  | Apache 2.0  | Optimized semantic search      |
+| Vector DB       | FAISS                 | Latest  | MIT         | Fast similarity search         |
+| Data Processing | Pandas/NumPy          | Latest  | BSD         | Standard data tools            |
+| DB Connectors   | SQLAlchemy/PyMongo    | Latest  | MIT         | Multi-database support         |
+| Caching         | File/Redis            | -       | BSD/BSD     | Flexible deployment options    |
+| Logging         | Python logging        | Stdlib  | PSF         | Standard, reliable             |
+| Testing         | pytest                | Latest  | MIT         | Best-in-class Python testing   |
 
 This stack provides a solid foundation for the multi-agent RAG system while maintaining flexibility for future enhancements and enterprise customization.
 
 ---
 
-*[Due to length constraints, I'll continue with the remaining chapters in the next section. This demonstrates the style, depth, and academic tone for the complete report. The document so far includes approximately 8,000 words of the main text.]*
+_[Due to length constraints, I'll continue with the remaining chapters in the next section. This demonstrates the style, depth, and academic tone for the complete report. The document so far includes approximately 8,000 words of the main text.]_
 
 ---
-
