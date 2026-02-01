@@ -1,0 +1,38 @@
+{
+  "test_date": "2026-02-01T12:27:55.472205",
+  "claims": {},
+  "measurements": {
+    "claim_3": {
+      "rag_usage_rate": 100.0,
+      "rag_used": 4,
+      "total_queries": 4
+    },
+    "claim_1": {
+      "average_latency_ms": 1044.2920327186584,
+      "median_latency_ms": 562.2094869613647,
+      "min_latency_ms": 158.69808197021484,
+      "max_latency_ms": 3603.299379348755,
+      "all_latencies": [
+        596.2052345275879,
+        158.69808197021484,
+        528.2137393951416,
+        3603.299379348755,
+        381.0291290283203,
+        715.9018516540527,
+        1988.227128982544,
+        382.76171684265137
+      ]
+    },
+    "claim_2": {
+      "completion_rate": 100.0,
+      "completed": 8,
+      "failed": 0,
+      "total": 8
+    }
+  },
+  "validation_status": {
+    "claim_3": true,
+    "claim_1": false,
+    "claim_2": true
+  }
+}

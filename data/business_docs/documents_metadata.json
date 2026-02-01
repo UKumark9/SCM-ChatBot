@@ -10,8 +10,8 @@
       "description": "",
       "upload_date": "2026-01-28T23:44:48.914316",
       "size_bytes": 3165447,
-      "text_length": 0,
-      "vectorized": false
+      "text_length": 44028,
+      "vectorized": true
     },
     {
       "id": "3ace160b98d9410c4eb3465b1b018e09",
@@ -23,8 +23,73 @@
       "description": "",
       "upload_date": "2026-01-30T00:06:06.878797",
       "size_bytes": 66435,
-      "text_length": 0,
-      "vectorized": false
+      "text_length": 4390,
+      "vectorized": true
+    },
+    {
+      "id": "3ef883cc348fd6f850d1b66b491eed3b",
+      "file_hash": "3ef883cc348fd6f850d1b66b491eed3b",
+      "original_name": "01_Product_Delay_Management_Policy.pdf",
+      "saved_name": "3ef883cc348fd6f850d1b66b491eed3b_01_Product_Delay_Management_Policy.pdf",
+      "file_type": "pdf",
+      "doc_type": "Policy",
+      "description": "",
+      "upload_date": "2026-02-01T00:59:51.614532",
+      "size_bytes": 8330,
+      "text_length": 5009,
+      "vectorized": true
+    },
+    {
+      "id": "e5f9b1b691fec5d88b13d742356f08db",
+      "file_hash": "e5f9b1b691fec5d88b13d742356f08db",
+      "original_name": "02_Inventory_Management_Policy.pdf",
+      "saved_name": "e5f9b1b691fec5d88b13d742356f08db_02_Inventory_Management_Policy.pdf",
+      "file_type": "pdf",
+      "doc_type": "Policy",
+      "description": "",
+      "upload_date": "2026-02-01T01:00:24.948890",
+      "size_bytes": 12579,
+      "text_length": 8265,
+      "vectorized": true
+    },
+    {
+      "id": "8048263269cea6aa3e423c9987fbb72b",
+      "file_hash": "8048263269cea6aa3e423c9987fbb72b",
+      "original_name": "03_Supplier_Quality_Management_Policy.pdf",
+      "saved_name": "8048263269cea6aa3e423c9987fbb72b_03_Supplier_Quality_Management_Policy.pdf",
+      "file_type": "pdf",
+      "doc_type": "Policy",
+      "description": "",
+      "upload_date": "2026-02-01T01:00:39.727402",
+      "size_bytes": 15541,
+      "text_length": 11524,
+      "vectorized": true
+    },
+    {
+      "id": "833114e03e8d9ca80c87238720053d27",
+      "file_hash": "833114e03e8d9ca80c87238720053d27",
+      "original_name": "04_Transportation_Logistics_Policy.pdf",
+      "saved_name": "833114e03e8d9ca80c87238720053d27_04_Transportation_Logistics_Policy.pdf",
+      "file_type": "pdf",
+      "doc_type": "Policy",
+      "description": "",
+      "upload_date": "2026-02-01T01:00:47.442928",
+      "size_bytes": 18704,
+      "text_length": 13813,
+      "vectorized": true
+    },
+    {
+      "id": "98ed9ef73eb4775d18bc61c18424e6f9",
+      "file_hash": "98ed9ef73eb4775d18bc61c18424e6f9",
+      "original_name": "05_Demand_Forecasting_Planning_Policy.pdf",
+      "saved_name": "98ed9ef73eb4775d18bc61c18424e6f9_05_Demand_Forecasting_Planning_Policy.pdf",
+      "file_type": "pdf",
+      "doc_type": "Policy",
+      "description": "",
+      "upload_date": "2026-02-01T01:00:55.623369",
+      "size_bytes": 21092,
+      "text_length": 16001,
+      "vectorized": true
     }
   ]
 }

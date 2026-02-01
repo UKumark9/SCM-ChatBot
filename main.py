@@ -300,8 +300,11 @@ class SCMChatbotApp:
                 self.order_items, self.payments
             )
 
-            # Build RAG system
-            doc_processor = DocumentProcessor(chunk_size=500, chunk_overlap=50)
+            # Build RAG system with improved settings
+            doc_processor = DocumentProcessor(
+                chunk_size=500,
+                chunk_overlap=100  # Improved overlap for better context
+            )
             documents = doc_processor.create_documents_from_data(data_wrapper)
 
             logger.info(f"📚 Created {len(documents)} documents for RAG indexing")
@@ -320,12 +323,13 @@ class SCMChatbotApp:
             self.rag_module = RAGModule(
                 vector_db=vector_db,
                 top_k=5,
-                similarity_threshold=0.7
+                similarity_threshold=2.0  # Improved threshold for better recall
             )
 
             logger.info("✅ RAG module initialized successfully")
             logger.info(f"   📊 Indexed documents: {max_docs}")
-            logger.info(f"   🔍 Vector search: Enabled")
+            logger.info(f"   🔍 Vector search: Enabled (improved settings)")
+            logger.info(f"   ⚙️  Similarity threshold: 2.0 (optimized)")
             logger.info(f"   📚 Agents will use RAG + Analytics")
             return True
 

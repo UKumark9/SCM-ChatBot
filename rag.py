@@ -21,8 +21,16 @@ logger = logging.getLogger(__name__)
 
 class DocumentProcessor:
     """Process and chunk documents for RAG"""
-    
-    def __init__(self, chunk_size: int = 500, chunk_overlap: int = 50):
+
+    def __init__(self, chunk_size: int = 500, chunk_overlap: int = 100):
+        """
+        Initialize Document Processor
+
+        Args:
+            chunk_size: Number of words per chunk
+            chunk_overlap: Number of overlapping words between chunks
+                          Increased default to preserve context better
+        """
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
     
@@ -116,15 +124,57 @@ class DocumentProcessor:
             raise
     
     def chunk_text(self, text: str) -> List[str]:
-        """Split text into overlapping chunks"""
-        words = text.split()
+        """
+        Split text into overlapping chunks with semantic boundaries
+
+        Args:
+            text: Input text to chunk
+
+        Returns:
+            List of text chunks
+        """
+        # Try to split by paragraphs first for better semantic preservation
+        paragraphs = text.split('\n\n')
         chunks = []
-        
-        for i in range(0, len(words), self.chunk_size - self.chunk_overlap):
-            chunk = ' '.join(words[i:i + self.chunk_size])
-            chunks.append(chunk)
-        
-        return chunks
+        current_chunk = []
+        current_size = 0
+
+        for para in paragraphs:
+            words = para.split()
+            para_size = len(words)
+
+            # If paragraph fits in current chunk
+            if current_size + para_size <= self.chunk_size:
+                current_chunk.extend(words)
+                current_size += para_size
+            else:
+                # Save current chunk if not empty
+                if current_chunk:
+                    chunks.append(' '.join(current_chunk))
+
+                # If paragraph is larger than chunk_size, split it
+                if para_size > self.chunk_size:
+                    for i in range(0, para_size, self.chunk_size - self.chunk_overlap):
+                        chunk = ' '.join(words[i:i + self.chunk_size])
+                        chunks.append(chunk)
+                    current_chunk = []
+                    current_size = 0
+                else:
+                    # Start new chunk with overlap from previous
+                    if chunks:
+                        prev_words = chunks[-1].split()
+                        overlap_words = prev_words[-self.chunk_overlap:]
+                        current_chunk = overlap_words + words
+                        current_size = len(current_chunk)
+                    else:
+                        current_chunk = words
+                        current_size = para_size
+
+        # Add final chunk
+        if current_chunk:
+            chunks.append(' '.join(current_chunk))
+
+        return chunks if chunks else [text]  # Return original if no chunks created
 
 
 class VectorDatabase:
@@ -238,38 +288,115 @@ class VectorDatabase:
 
 class RAGModule:
     """Retrieval-Augmented Generation Module"""
-    
+
     def __init__(self, vector_db: VectorDatabase, top_k: int = 5,
-                 similarity_threshold: float = 1.5):
+                 similarity_threshold: float = 2.0):
+        """
+        Initialize RAG Module
+
+        Args:
+            vector_db: VectorDatabase instance
+            top_k: Number of top results to retrieve
+            similarity_threshold: Distance threshold (higher = more permissive)
+                                 Recommended: 2.0-3.0 for good recall
+                                 Lower values (< 1.0) = very strict, may miss relevant docs
+        """
         self.vector_db = vector_db
         self.top_k = top_k
         self.similarity_threshold = similarity_threshold
     
-    def retrieve_context(self, query: str) -> str:
-        """Retrieve relevant context for a query"""
+    def retrieve_context(self, query: str, use_query_expansion: bool = True) -> str:
+        """
+        Retrieve relevant context for a query
+
+        Args:
+            query: User query
+            use_query_expansion: If True, expand query with related terms
+
+        Returns:
+            Retrieved context as formatted string
+        """
         try:
-            results = self.vector_db.search(query, self.top_k)
-            
+            # Expand query if enabled
+            queries_to_search = [query]
+            if use_query_expansion:
+                expanded_queries = self._expand_query(query)
+                queries_to_search.extend(expanded_queries)
+                logger.info(f"Expanded query to {len(queries_to_search)} variations")
+
+            # Search with all query variations
+            all_results = {}
+            for q in queries_to_search:
+                results = self.vector_db.search(q, self.top_k)
+                for doc, score in results:
+                    doc_id = doc.get('id', id(doc))
+                    # Keep best score for each document
+                    if doc_id not in all_results or score < all_results[doc_id][1]:
+                        all_results[doc_id] = (doc, score)
+
+            # Convert back to list and sort by score
+            results = sorted(all_results.values(), key=lambda x: x[1])[:self.top_k]
+
             # Filter by similarity threshold
             filtered_results = [
-                (doc, score) for doc, score in results 
+                (doc, score) for doc, score in results
                 if score < self.similarity_threshold  # Lower distance = higher similarity
             ]
-            
+
             if not filtered_results:
+                logger.warning(f"No results passed threshold {self.similarity_threshold}")
                 return "No relevant context found."
-            
+
             # Combine retrieved documents
             context_parts = []
             for doc, score in filtered_results:
-                context_parts.append(f"[Relevance: {1/(1+score):.2f}]\n{doc['text']}\n")
-            
+                similarity = 1/(1+score)
+                context_parts.append(f"[Relevance: {similarity:.2f}]\n{doc['text']}\n")
+
             context = "\n---\n".join(context_parts)
+            logger.info(f"Retrieved {len(filtered_results)} relevant documents")
             return context
-            
+
         except Exception as e:
             logger.error(f"Error retrieving context: {str(e)}")
             return ""
+
+    def _expand_query(self, query: str) -> List[str]:
+        """
+        Expand query with related terms for better retrieval
+
+        Args:
+            query: Original query
+
+        Returns:
+            List of expanded query variations
+        """
+        expanded = []
+        query_lower = query.lower()
+
+        # Severity-related expansions
+        if 'severity' in query_lower or 'level' in query_lower:
+            expanded.extend([
+                "critical delay major delay minor delay classification",
+                "delay severity levels product management",
+                "critical major minor at-risk delay categories"
+            ])
+
+        # Delay-related expansions
+        if 'delay' in query_lower:
+            expanded.extend([
+                "product delay management policy",
+                "delivery delay classification"
+            ])
+
+        # Policy-related expansions
+        if 'policy' in query_lower or 'procedure' in query_lower:
+            expanded.extend([
+                "supply chain management procedures",
+                "operational policies guidelines"
+            ])
+
+        return expanded[:2]  # Limit to top 2 expansions
     
     def augment_query(self, query: str, context: str) -> str:
         """Augment the query with retrieved context"""

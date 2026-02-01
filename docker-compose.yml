@@ -1,0 +1,99 @@
+version: '3.8'
+
+services:
+  # Main SCM Chatbot Application
+  scm-chatbot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: scm-chatbot
+    ports:
+      - "7860:7860"  # Gradio UI
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # Persist data directories
+      - ./data:/app/data
+      - ./logs:/app/logs
+      # Mount configuration
+      - ./config:/app/config
+      # Mount business documents
+      - ./data/business_docs:/app/data/business_docs
+    restart: unless-stopped
+    networks:
+      - scm-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: MongoDB for advanced data storage
+  # mongodb:
+  #   image: mongo:7.0
+  #   container_name: scm-mongodb
+  #   ports:
+  #     - "27017:27017"
+  #   environment:
+  #     - MONGO_INITDB_ROOT_USERNAME=admin
+  #     - MONGO_INITDB_ROOT_PASSWORD=password
+  #   volumes:
+  #     - mongodb_data:/data/db
+  #   networks:
+  #     - scm-network
+  #   restart: unless-stopped
+
+  # Optional: Redis for caching and feature store
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: scm-redis
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   networks:
+  #     - scm-network
+  #   restart: unless-stopped
+  #   command: redis-server --appendonly yes
+
+  # Optional: Prometheus for metrics
+  # prometheus:
+  #   image: prom/prometheus:latest
+  #   container_name: scm-prometheus
+  #   ports:
+  #     - "9090:9090"
+  #   volumes:
+  #     - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+  #     - prometheus_data:/prometheus
+  #   networks:
+  #     - scm-network
+  #   restart: unless-stopped
+
+  # Optional: Grafana for dashboards
+  # grafana:
+  #   image: grafana/grafana:latest
+  #   container_name: scm-grafana
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     - GF_SECURITY_ADMIN_PASSWORD=admin
+  #   volumes:
+  #     - grafana_data:/var/lib/grafana
+  #   networks:
+  #     - scm-network
+  #   restart: unless-stopped
+  #   depends_on:
+  #     - prometheus
+
+networks:
+  scm-network:
+    driver: bridge
+
+volumes:
+  # Uncomment if using optional services
+  # mongodb_data:
+  # redis_data:
+  # prometheus_data:
+  # grafana_data:
