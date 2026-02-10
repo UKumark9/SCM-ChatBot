@@ -6,6 +6,7 @@ Part of the SCM Chatbot Agentic Architecture
 import logging
 from typing import Dict, Any
 import pandas as pd
+from ui_formatter import UIFormatter
 
 logger = logging.getLogger(__name__)
 
@@ -145,13 +146,19 @@ Use the available tools to answer specific data queries."""),
         except Exception as e:
             return f"Error getting data summary: {e}"
 
-    def query(self, user_query: str) -> Dict[str, Any]:
+    def query(self, user_query: str, classification: Dict = None) -> Dict[str, Any]:
         """Process data query"""
         try:
-            # Try RAG context retrieval first
+            # Determine if should use RAG based on classification
+            should_use_rag = classification.get('use_rag', True) if classification else True
+            should_use_database = classification.get('use_database', True) if classification else True
+
+            logger.info(f"Data Query Agent - Use RAG: {should_use_rag} | Use Database: {should_use_database}")
+
+            # Try RAG context retrieval if classification allows it
             rag_context = None
             used_rag = False
-            if self.rag_module:
+            if self.rag_module and should_use_rag:
                 try:
                     rag_context = self.rag_module.retrieve_context(user_query)
                     if rag_context and len(rag_context.strip()) > 0:
@@ -180,6 +187,22 @@ Use the available tools to answer specific data queries."""),
             else:
                 query_lower = user_query.lower()
 
+                # Data query agent typically doesn't handle policy questions
+                # But respect classification if provided
+                if classification and classification.get('query_type') == 'policy':
+                    if used_rag and rag_context and len(rag_context.strip()) > 20:
+                        # Return RAG context only for policy questions
+                        response = UIFormatter.format_rag_context(rag_context)
+
+                        return {
+                            'response': response,
+                            'agent': 'Data Query Agent (Rule-Based) + RAG',
+                            'success': True,
+                            'used_rag': True,
+                            'classification': classification
+                        }
+
+                # Data queries
                 if 'order' in query_lower:
                     response = self._query_orders()
                 elif 'customer' in query_lower:
@@ -189,17 +212,20 @@ Use the available tools to answer specific data queries."""),
                 else:
                     response = self._get_data_summary()
 
-                # Append RAG context if available and meaningful
-                if used_rag and rag_context and len(rag_context.strip()) > 20 and "no relevant" not in rag_context.lower():
-                    response += f"\n\n📚 **Document Context:**\n{rag_context[:400]}"
-                    if len(rag_context) > 400:
-                        response += "..."
+                # Append RAG context only if classification allows it (mixed queries)
+                if used_rag and should_use_rag and rag_context and len(rag_context.strip()) > 20 and "no relevant" not in rag_context.lower():
+                    # Only append if this is a mixed query (both RAG and database)
+                    if classification and classification.get('query_type') == 'mixed':
+                        # Use UIFormatter for better RAG context formatting
+                        formatted_rag = UIFormatter.format_rag_context(rag_context)
+                        response += f"\n\n{formatted_rag}"
 
                 return {
                     'response': response,
                     'agent': 'Data Query Agent (Rule-Based)' + (' + RAG' if used_rag else ''),
                     'success': True,
-                    'used_rag': used_rag
+                    'used_rag': used_rag,
+                    'classification': classification
                 }
 
         except Exception as e:

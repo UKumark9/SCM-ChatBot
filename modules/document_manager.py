@@ -13,6 +13,41 @@ import hashlib
 logger = logging.getLogger(__name__)
 
 
+def clean_pdf_text(text: str) -> str:
+    """
+    Clean PDF text by replacing encoding artifacts with proper characters
+    """
+    if not text:
+        return text
+
+    # Replace common PDF encoding artifacts
+    replacements = {
+        '(cid:127)': '•',
+        '(cid:129)': '•',
+        '(cid:139)': '‹',
+        '(cid:155)': '›',
+        '(cid:150)': '–',
+        '(cid:151)': '—',
+        '(cid:147)': '"',
+        '(cid:148)': '"',
+        '(cid:145)': ''',
+        '(cid:146)': ''',
+        '\x00': '',
+        '\uf0b7': '•',
+        '\uf0a7': '◦',
+    }
+
+    cleaned = text
+    for old, new in replacements.items():
+        cleaned = cleaned.replace(old, new)
+
+    # Remove any remaining (cid:XXX) patterns
+    import re
+    cleaned = re.sub(r'\(cid:\d+\)', '•', cleaned)
+
+    return cleaned
+
+
 class DocumentManager:
     """
     Manages business documents and integrates with Vector Store
@@ -162,7 +197,7 @@ class DocumentManager:
                         text = ""
                         for page in pdf_reader.pages:
                             text += page.extract_text() + "\n"
-                        return text
+                        return clean_pdf_text(text)
                 except ImportError:
                     logger.warning("PyPDF2 not installed. Install with: pip install PyPDF2")
                     return None
@@ -182,23 +217,58 @@ class DocumentManager:
             return None
 
     def _vectorize_document(self, doc_id: str, text_content: str):
-        """Vectorize document and add to RAG system"""
+        """Vectorize document and add to RAG system with auto-reindexing"""
         if not self.rag_module:
             return
 
-        # Create document chunks
-        from rag import DocumentProcessor
-        processor = DocumentProcessor(chunk_size=500, chunk_overlap=50)
+        try:
+            # Get document metadata for enrichment
+            doc_meta = self.get_document(doc_id)
+            if not doc_meta:
+                logger.warning(f"Document {doc_id} not found in metadata")
+                return
 
-        # Create chunks with metadata
-        chunks = processor.chunk_text(
-            text=text_content,
-            metadata={'doc_id': doc_id, 'source': 'business_document'}
-        )
+            # Create document chunks
+            from rag import DocumentProcessor
+            processor = DocumentProcessor(chunk_size=500, chunk_overlap=100)
 
-        # Add to vector database
-        if hasattr(self.rag_module, 'vector_db'):
-            self.rag_module.vector_db.add_documents(chunks)
+            # Get text chunks
+            text_chunks = processor.chunk_text(text_content)
+            logger.info(f"Created {len(text_chunks)} chunks for document {doc_id}")
+
+            # Convert to proper document format for vector database
+            rag_documents = []
+            for chunk_idx, chunk_text in enumerate(text_chunks):
+                rag_doc = {
+                    'id': f"{doc_id}_chunk_{chunk_idx}",
+                    'text': chunk_text,
+                    'type': 'business_document',
+                    'metadata': {
+                        'doc_id': doc_id,
+                        'doc_name': doc_meta['original_name'],
+                        'doc_type': doc_meta['doc_type'],
+                        'chunk_index': chunk_idx,
+                        'total_chunks': len(text_chunks),
+                        'source': 'uploaded_document'
+                    }
+                }
+                rag_documents.append(rag_doc)
+
+            # Add to vector database (incremental indexing)
+            if hasattr(self.rag_module, 'vector_db'):
+                self.rag_module.vector_db.add_documents(rag_documents)
+                logger.info(f"✅ Added {len(rag_documents)} chunks to vector database")
+
+                # Save updated index to disk
+                from pathlib import Path
+                vector_index_path = Path("data/vector_index")
+                if vector_index_path.exists():
+                    self.rag_module.vector_db.save_index(str(vector_index_path))
+                    logger.info(f"✅ Saved updated index to {vector_index_path}")
+
+        except Exception as e:
+            logger.error(f"Error vectorizing document {doc_id}: {e}")
+            raise
 
     def list_documents(self, doc_type: Optional[str] = None) -> List[Dict]:
         """
@@ -222,7 +292,7 @@ class DocumentManager:
 
     def delete_document(self, doc_id: str) -> bool:
         """
-        Delete a document
+        Delete a document and remove its chunks from the vector index
 
         Args:
             doc_id: Document ID
@@ -233,25 +303,79 @@ class DocumentManager:
         try:
             doc = self.get_document(doc_id)
             if not doc:
+                logger.warning(f"Document {doc_id} not found")
                 return False
 
-            # Delete file
+            doc_name = doc['original_name']
+            logger.info(f"Deleting document: {doc_name}")
+
+            # Step 1: Delete physical file
             file_path = self.docs_path / doc['saved_name']
             if file_path.exists():
                 file_path.unlink()
+                logger.info(f"  ✓ Deleted file: {doc['saved_name']}")
 
-            # Remove from metadata
+            # Step 2: Remove from metadata
             self.metadata['documents'] = [
                 d for d in self.metadata['documents']
                 if d['id'] != doc_id
             ]
             self._save_metadata()
+            logger.info(f"  ✓ Removed from metadata")
 
-            logger.info(f"✅ Deleted document: {doc['original_name']}")
+            # Step 3: Remove chunks from vector index
+            if self.rag_module and hasattr(self.rag_module, 'vector_db'):
+                vector_db = self.rag_module.vector_db
+
+                if vector_db.documents:
+                    # Filter out all chunks belonging to this document
+                    initial_count = len(vector_db.documents)
+                    remaining_docs = [
+                        d for d in vector_db.documents
+                        if d.get('metadata', {}).get('doc_id') != doc_id
+                    ]
+                    removed_count = initial_count - len(remaining_docs)
+
+                    if removed_count > 0:
+                        logger.info(f"  ✓ Removing {removed_count} chunks from vector index...")
+
+                        # Rebuild index with remaining documents
+                        vector_db.documents = []
+                        if hasattr(vector_db, 'doc_embeddings'):
+                            vector_db.doc_embeddings = None
+
+                        # Reinitialize FAISS index
+                        import faiss
+                        vector_db.index = faiss.IndexFlatL2(vector_db.dimension)
+
+                        # Rebuild BM25 if enhanced RAG
+                        if hasattr(vector_db, 'bm25'):
+                            vector_db.bm25 = None
+                            vector_db.tokenized_docs = None
+
+                        if remaining_docs:
+                            # Rebuild index with remaining documents
+                            vector_db.build_index(remaining_docs)
+                            logger.info(f"  ✓ Rebuilt index with {len(remaining_docs)} remaining chunks")
+
+                            # Save updated index
+                            from pathlib import Path
+                            vector_index_path = Path("data/vector_index")
+                            if vector_index_path.exists():
+                                vector_db.save_index(str(vector_index_path))
+                                logger.info(f"  ✓ Saved updated index")
+                        else:
+                            logger.info(f"  ⚠️  No documents remaining in index")
+                    else:
+                        logger.info(f"  ℹ️  No chunks found in vector index for this document")
+
+            logger.info(f"✅ Successfully deleted document: {doc_name}")
             return True
 
         except Exception as e:
             logger.error(f"Error deleting document {doc_id}: {e}")
+            import traceback
+            logger.debug(traceback.format_exc())
             return False
 
     def search_documents(self, query: str, top_k: int = 5) -> List[Dict]:

@@ -21,6 +21,8 @@ from agents.delay_agent import DelayAgent
 from agents.analytics_agent import AnalyticsAgent
 from agents.forecasting_agent import ForecastingAgent
 from agents.data_query_agent import DataQueryAgent
+from ui_formatter import UIFormatter
+from intent_classifier import IntentClassifier
 
 
 class AgentOrchestrator:
@@ -44,6 +46,9 @@ class AgentOrchestrator:
         self.rag = rag_module
         self.use_langchain = use_langchain and LANGCHAIN_AVAILABLE
         self.conversation_history = []
+
+        # Initialize Intent Classifier for better query routing
+        self.intent_classifier = IntentClassifier()
 
         # Initialize LLM client
         self.llm_client = None
@@ -320,35 +325,45 @@ class AgentOrchestrator:
             Response dictionary from the agent(s)
         """
         try:
-            # Analyze intent
+            # NEW: Use Intent Classifier to determine if this is policy/data/mixed
+            classification = self.intent_classifier.classify_query(query)
+            logger.info(f"Query Classification: {classification['query_type']} | Domain: {classification['domain']} | Confidence: {classification['confidence']:.2f}")
+            logger.info(f"  → Use RAG: {classification['use_rag']} | Use Database: {classification['use_database']}")
+
+            # Analyze intent for agent routing
             intent = self.analyze_intent(query)
+
+            # Add classification to intent
+            intent['classification'] = classification
 
             # NEW: Handle multi-intent queries
             if intent.get('multi_intent', False) or intent['agent'] == 'multi_agent':
                 result = self._handle_multi_intent_query(query, intent)
             # Route to appropriate agent for single intent
             elif intent['agent'] == 'delay':
-                result = self.delay_agent.query(query)
+                result = self.delay_agent.query(query, classification=classification)
             elif intent['agent'] == 'forecasting':
-                result = self.forecasting_agent.query(query)
+                result = self.forecasting_agent.query(query, classification=classification)
             elif intent['agent'] == 'data_query':
-                result = self.data_query_agent.query(query)
+                result = self.data_query_agent.query(query, classification=classification)
             elif intent['agent'] == 'comprehensive':
                 # For comprehensive queries, gather from multiple agents
                 result = self._handle_comprehensive_query(query)
             else:
                 # Default to analytics agent
-                result = self.analytics_agent.query(query)
+                result = self.analytics_agent.query(query, classification=classification)
 
             # Add metadata
             result['intent'] = intent
+            result['classification'] = classification
             result['orchestrator'] = 'Multi-Agent System' if self.use_langchain else 'Rule-Based Router'
 
             # Store in history
             self.conversation_history.append({
                 'query': query,
                 'response': result,
-                'intent': intent
+                'intent': intent,
+                'classification': classification
             })
 
             return result
@@ -688,39 +703,34 @@ class AgentOrchestrator:
                 if result.get('used_rag') or agents_with_rag:
                     metrics_tracker.add_data_source(query_id, 'rag_documents')
 
-            # Format response
-            response_text = result.get('response', 'No response generated')
-
             # Calculate hallucination score
             if metrics_tracker and query_id:
                 # Assume low hallucination since we're using grounded analytics
-                metrics_tracker.calculate_hallucination_score(query_id, response_text, ground_truth_data={'analytics': True})
+                response_text_temp = result.get('response', 'No response generated')
+                metrics_tracker.calculate_hallucination_score(query_id, response_text_temp, ground_truth_data={'analytics': True})
 
-            # For multi-agent queries, skip duplicate agent info (already in response)
-            is_multi_agent = 'agents_used' in result and len(result.get('agents_used', [])) > 1
-
-            # Add agent info if requested (only for single-agent queries)
-            if show_agent and not is_multi_agent:
-                agent_info = self._build_agent_info(
-                    agent=result.get('agent', 'Unknown'),
-                    orchestrator=result.get('orchestrator', 'Unknown'),
-                    intent=result.get('intent', {}),
-                    success=result.get('success', True),
-                    result=result
-                )
-                response_text += agent_info
-
-            # End metrics tracking and add metrics display
+            # End metrics tracking
+            execution_time = time.time() - start_time
             if metrics_tracker and query_id:
                 metrics_tracker.end_query(query_id, success=result.get('success', True))
 
-                if show_metrics:
-                    # Get the saved metrics
-                    recent = metrics_tracker.get_recent_metrics(limit=1)
-                    if recent:
-                        # Use compact format for all queries
-                        metrics_display = self._format_compact_metrics(recent[0], single_line=True)
-                        response_text += metrics_display
+            # Add metrics to result for UIFormatter
+            if metrics_tracker and query_id and show_metrics:
+                recent = metrics_tracker.get_recent_metrics(limit=1)
+                if recent:
+                    result['metrics'] = {
+                        'execution_time': execution_time,
+                        'latency_ms': recent[0].get('latency_ms', 0),
+                        'data_sources': recent[0].get('data_sources_used', []),
+                        'hallucination_score': recent[0].get('hallucination_score', 0)
+                    }
+            else:
+                result['metrics'] = {
+                    'execution_time': execution_time
+                }
+
+            # Use UIFormatter to format the response with better readability
+            response_text = UIFormatter.format_response(result)
 
             return response_text
 

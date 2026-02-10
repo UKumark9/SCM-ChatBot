@@ -6,6 +6,7 @@ Part of the SCM Chatbot Agentic Architecture
 import logging
 from typing import Dict, Any, List
 import pandas as pd
+from ui_formatter import UIFormatter
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +77,15 @@ class DelayAgent:
                 ("system", """You are a specialized Delivery Delay Analysis Agent.
 Your expertise is in analyzing delivery performance, identifying delay patterns, and providing insights.
 
+CRITICAL: Determine if the user is asking about:
+1. **POLICY/PROCEDURES** (severity levels, definitions, guidelines, classifications, protocols)
+   → If the input contains "Context from documents:", USE THAT CONTEXT to answer
+   → DO NOT query database tools for policy questions
+   → Extract and present the information from the provided document context
+
+2. **DATA/STATISTICS** (actual delays, counts, rates, trends from current operations)
+   → Use the available tools to query real operational data
+
 IMPORTANT INSTRUCTIONS:
 - Answer ONLY what the user specifically asks for
 - Be concise and direct - don't provide extra information unless requested
@@ -83,7 +93,7 @@ IMPORTANT INSTRUCTIONS:
 - If asked for multiple things or "show statistics", then provide comprehensive details
 - Always include the specific number/percentage with proper context
 
-When users ask about delays:
+When users ask about DATA/STATISTICS:
 1. Use GetDelayStatistics for overall delay metrics
 2. Use GetStateDelays for geographic analysis
 3. Use GetDelayTrends for temporal patterns
@@ -94,6 +104,7 @@ RESPONSE GUIDELINES:
 - "Show delay statistics" → Provide comprehensive statistics
 - "How many delayed orders?" → Answer with just the count
 - "Analyze delays" → Provide analysis with multiple metrics
+- "What are severity levels?" → Use the document context if provided, otherwise explain you need policy documents
 
 Extract only the relevant information from tool results to answer the specific question."""),
                 ("human", "{input}"),
@@ -237,21 +248,28 @@ Extract only the relevant information from tool results to answer the specific q
             logger.error(f"Error in product delay analysis: {e}")
             return f"Error getting product delays: {e}"
 
-    def query(self, user_query: str) -> Dict[str, Any]:
+    def query(self, user_query: str, classification: Dict = None) -> Dict[str, Any]:
         """
         Process delay-related query
 
         Args:
             user_query: User's question about delays
+            classification: Optional query classification (policy/data/mixed)
 
         Returns:
             Dictionary with response and metadata
         """
         try:
-            # Try RAG context retrieval first
+            # Determine if should use RAG based on classification
+            should_use_rag = classification.get('use_rag', True) if classification else True
+            should_use_database = classification.get('use_database', True) if classification else True
+
+            logger.info(f"Delay Agent - Use RAG: {should_use_rag} | Use Database: {should_use_database}")
+
+            # Try RAG context retrieval if classification allows it
             rag_context = None
             used_rag = False
-            if self.rag_module:
+            if self.rag_module and should_use_rag:
                 try:
                     rag_context = self.rag_module.retrieve_context(user_query)
                     if rag_context and len(rag_context.strip()) > 0:
@@ -280,7 +298,31 @@ Extract only the relevant information from tool results to answer the specific q
             else:
                 query_lower = user_query.lower()
 
-                # Check for product-level queries FIRST
+                # NEW: If classification says this is a POLICY ONLY question
+                if classification and classification.get('query_type') == 'policy':
+                    if used_rag and rag_context and len(rag_context.strip()) > 20:
+                        # Return RAG context only for policy questions
+                        response = UIFormatter.format_rag_context(rag_context)
+
+                        return {
+                            'response': response,
+                            'agent': 'Delay Agent (Rule-Based) + RAG',
+                            'success': True,
+                            'used_rag': True,
+                            'classification': classification
+                        }
+                    else:
+                        # No RAG context found for policy question
+                        return {
+                            'response': "No policy documents found for this query. Please rephrase or ask a data question.",
+                            'agent': 'Delay Agent (Rule-Based)',
+                            'success': True,
+                            'used_rag': False,
+                            'classification': classification
+                        }
+
+                # NEW: If classification says this is DATA ONLY or default - skip policy check
+                # PRIORITY: Check for product-level DATA queries
                 if 'product' in query_lower or 'category' in query_lower or 'item' in query_lower:
                     response = self._get_product_delays(user_query)
                 # Geographic queries
@@ -317,17 +359,20 @@ Extract only the relevant information from tool results to answer the specific q
 
 💡 *Ask for "delay statistics" for more details*"""
 
-                # Append RAG context if available and meaningful
-                if used_rag and rag_context and len(rag_context.strip()) > 20 and "no relevant" not in rag_context.lower():
-                    response += f"\n\n📚 **Document Context:**\n{rag_context[:400]}"
-                    if len(rag_context) > 400:
-                        response += "..."
+                # Append RAG context only if classification allows it (mixed queries)
+                if used_rag and should_use_rag and rag_context and len(rag_context.strip()) > 20 and "no relevant" not in rag_context.lower():
+                    # Only append if this is a mixed query (both RAG and database)
+                    if classification and classification.get('query_type') == 'mixed':
+                        # Use UIFormatter for better RAG context formatting
+                        formatted_rag = UIFormatter.format_rag_context(rag_context)
+                        response += f"\n\n{formatted_rag}"
 
                 return {
                     'response': response,
                     'agent': 'Delay Agent (Rule-Based)' + (' + RAG' if used_rag else ''),
                     'success': True,
-                    'used_rag': used_rag
+                    'used_rag': used_rag,
+                    'classification': classification
                 }
 
         except Exception as e:

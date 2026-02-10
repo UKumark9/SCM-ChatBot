@@ -5,6 +5,7 @@ Part of the SCM Chatbot Agentic Architecture
 
 import logging
 from typing import Dict, Any
+from ui_formatter import UIFormatter
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +74,15 @@ class ForecastingAgent:
                 ("system", """You are a specialized Demand Forecasting Agent.
 Your expertise is in predicting future demand, analyzing trends, and helping with inventory planning.
 
+CRITICAL: Determine if the user is asking about:
+1. **POLICY/PROCEDURES** (forecasting methodology, guidelines, planning processes, definitions)
+   → If the input contains "Context from documents:", USE THAT CONTEXT to answer
+   → DO NOT query database tools for policy questions
+   → Extract and present the information from the provided document context
+
+2. **DATA/FORECASTS** (actual demand predictions, future numbers, trend analysis)
+   → Use the available tools to generate forecasts from data
+
 IMPORTANT INSTRUCTIONS:
 - Answer ONLY what the user specifically asks for
 - Be concise and direct - don't provide extra information unless requested
@@ -89,6 +99,7 @@ RESPONSE GUIDELINES:
 - "What will demand be?" → Provide simple forecast answer
 - "Detailed forecast analysis" → Include all metrics and insights
 - "Forecast for product X" → Use product-specific tool
+- "What is the forecasting policy?" → Use the document context if provided
 
 Extract only the relevant information from tool results to answer the specific question."""),
                 ("human", "{input}"),
@@ -184,13 +195,19 @@ Extract only the relevant information from tool results to answer the specific q
             logger.error(f"Error in product demand forecasting: {e}")
             return f"Error forecasting product demand: {e}"
 
-    def query(self, user_query: str) -> Dict[str, Any]:
+    def query(self, user_query: str, classification: Dict = None) -> Dict[str, Any]:
         """Process forecasting query"""
         try:
-            # Try RAG context retrieval first
+            # Determine if should use RAG based on classification
+            should_use_rag = classification.get('use_rag', True) if classification else True
+            should_use_database = classification.get('use_database', True) if classification else True
+
+            logger.info(f"Forecasting Agent - Use RAG: {should_use_rag} | Use Database: {should_use_database}")
+
+            # Try RAG context retrieval if classification allows it
             rag_context = None
             used_rag = False
-            if self.rag_module:
+            if self.rag_module and should_use_rag:
                 try:
                     rag_context = self.rag_module.retrieve_context(user_query)
                     if rag_context and len(rag_context.strip()) > 0:
@@ -217,9 +234,33 @@ Extract only the relevant information from tool results to answer the specific q
 
             # Fallback to rule-based
             else:
-                # Extract period from query
                 query_lower = user_query.lower()
 
+                # NEW: If classification says this is a POLICY ONLY question
+                if classification and classification.get('query_type') == 'policy':
+                    if used_rag and rag_context and len(rag_context.strip()) > 20:
+                        # Return RAG context only for policy questions
+                        response = UIFormatter.format_rag_context(rag_context)
+
+                        return {
+                            'response': response,
+                            'agent': 'Forecasting Agent (Rule-Based) + RAG',
+                            'success': True,
+                            'used_rag': True,
+                            'classification': classification
+                        }
+                    else:
+                        # No RAG context found for policy question
+                        return {
+                            'response': "No policy documents found for this query. Please rephrase or ask a data question.",
+                            'agent': 'Forecasting Agent (Rule-Based)',
+                            'success': True,
+                            'used_rag': False,
+                            'classification': classification
+                        }
+
+                # NEW: If classification says this is DATA ONLY or default - skip policy check
+                # Data/forecasting queries - Extract period from query
                 if '60' in query_lower or 'two month' in query_lower:
                     periods = 60
                 elif '90' in query_lower or 'three month' in query_lower:
@@ -229,17 +270,20 @@ Extract only the relevant information from tool results to answer the specific q
 
                 response = self._forecast_demand(periods)
 
-                # Append RAG context if available and meaningful
-                if used_rag and rag_context and len(rag_context.strip()) > 20 and "no relevant" not in rag_context.lower():
-                    response += f"\n\n📚 **Document Context:**\n{rag_context[:400]}"
-                    if len(rag_context) > 400:
-                        response += "..."
+                # Append RAG context only if classification allows it (mixed queries)
+                if used_rag and should_use_rag and rag_context and len(rag_context.strip()) > 20 and "no relevant" not in rag_context.lower():
+                    # Only append if this is a mixed query (both RAG and database)
+                    if classification and classification.get('query_type') == 'mixed':
+                        # Use UIFormatter for better RAG context formatting
+                        formatted_rag = UIFormatter.format_rag_context(rag_context)
+                        response += f"\n\n{formatted_rag}"
 
                 return {
                     'response': response,
                     'agent': 'Forecasting Agent (Rule-Based)' + (' + RAG' if used_rag else ''),
                     'success': True,
-                    'used_rag': used_rag
+                    'used_rag': used_rag,
+                    'classification': classification
                 }
 
         except Exception as e:

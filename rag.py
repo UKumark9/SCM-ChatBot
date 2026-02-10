@@ -224,18 +224,53 @@ class VectorDatabase:
             logger.error(f"Error building index: {str(e)}")
             raise
     
+    def add_documents(self, new_documents: List[Dict]):
+        """
+        Add new documents to existing index (incremental indexing)
+
+        Args:
+            new_documents: List of document dictionaries to add
+        """
+        try:
+            if not new_documents:
+                logger.warning("No documents to add")
+                return
+
+            logger.info(f"Adding {len(new_documents)} new documents to index...")
+
+            # Embed new documents
+            new_embeddings = self.embed_documents(new_documents)
+
+            # Add to FAISS index
+            self.index.add(new_embeddings.astype('float32'))
+
+            # Append to documents list
+            self.documents.extend(new_documents)
+
+            # Append to embeddings array
+            if self.doc_embeddings is not None:
+                self.doc_embeddings = np.vstack([self.doc_embeddings, new_embeddings])
+            else:
+                self.doc_embeddings = new_embeddings
+
+            logger.info(f"✅ Added {len(new_documents)} documents. Total: {len(self.documents)}")
+
+        except Exception as e:
+            logger.error(f"Error adding documents: {str(e)}")
+            raise
+
     def search(self, query: str, top_k: int = 5) -> List[Tuple[Dict, float]]:
         """Search for relevant documents"""
         try:
             logger.info(f"Searching for: {query}")
             query_embedding = self.embedding_model.encode([query])
             distances, indices = self.index.search(query_embedding.astype('float32'), top_k)
-            
+
             results = []
             for idx, distance in zip(indices[0], distances[0]):
                 if idx < len(self.documents):
                     results.append((self.documents[idx], float(distance)))
-            
+
             logger.info(f"Found {len(results)} results")
             return results
         except Exception as e:

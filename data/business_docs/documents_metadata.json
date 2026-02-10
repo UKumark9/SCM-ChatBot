@@ -1,19 +1,6 @@
 {
   "documents": [
     {
-      "id": "1af077403ed9e6b43a1107b1ff9554b9",
-      "file_hash": "1af077403ed9e6b43a1107b1ff9554b9",
-      "original_name": "Lecture 1 Introduction to ML.pdf",
-      "saved_name": "1af077403ed9e6b43a1107b1ff9554b9_Lecture 1 Introduction to ML.pdf",
-      "file_type": "pdf",
-      "doc_type": "General",
-      "description": "",
-      "upload_date": "2026-01-28T23:44:48.914316",
-      "size_bytes": 3165447,
-      "text_length": 44028,
-      "vectorized": true
-    },
-    {
       "id": "3ace160b98d9410c4eb3465b1b018e09",
       "file_hash": "3ace160b98d9410c4eb3465b1b018e09",
       "original_name": "SCM policies.pdf",
@@ -36,7 +23,7 @@
       "description": "",
       "upload_date": "2026-02-01T00:59:51.614532",
       "size_bytes": 8330,
-      "text_length": 5009,
+      "text_length": 4505,
       "vectorized": true
     },
     {
@@ -49,7 +36,7 @@
       "description": "",
       "upload_date": "2026-02-01T01:00:24.948890",
       "size_bytes": 12579,
-      "text_length": 8265,
+      "text_length": 7409,
       "vectorized": true
     },
     {
@@ -62,7 +49,7 @@
       "description": "",
       "upload_date": "2026-02-01T01:00:39.727402",
       "size_bytes": 15541,
-      "text_length": 11524,
+      "text_length": 10276,
       "vectorized": true
     },
     {
@@ -75,7 +62,7 @@
       "description": "",
       "upload_date": "2026-02-01T01:00:47.442928",
       "size_bytes": 18704,
-      "text_length": 13813,
+      "text_length": 12253,
       "vectorized": true
     },
     {
@@ -86,9 +73,9 @@
       "file_type": "pdf",
       "doc_type": "Policy",
       "description": "",
-      "upload_date": "2026-02-01T01:00:55.623369",
+      "upload_date": "2026-02-07T12:23:54.346219",
       "size_bytes": 21092,
-      "text_length": 16001,
+      "text_length": 14246,
       "vectorized": true
     }
   ]

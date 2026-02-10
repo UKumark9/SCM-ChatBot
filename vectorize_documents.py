@@ -23,6 +23,47 @@ logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
 
 
+def clean_pdf_text(text: str) -> str:
+    """
+    Clean PDF text by replacing encoding artifacts with proper characters
+
+    Args:
+        text: Raw PDF text
+
+    Returns:
+        Cleaned text with proper characters
+    """
+    if not text:
+        return text
+
+    # Replace common PDF encoding artifacts
+    replacements = {
+        '(cid:127)': '•',  # Bullet point
+        '(cid:129)': '•',
+        '(cid:139)': '‹',
+        '(cid:155)': '›',
+        '(cid:150)': '–',  # En dash
+        '(cid:151)': '—',  # Em dash
+        '(cid:147)': '"',  # Left double quote
+        '(cid:148)': '"',  # Right double quote
+        '(cid:145)': ''',  # Left single quote
+        '(cid:146)': ''',  # Right single quote
+        '\x00': '',  # Null characters
+        '\uf0b7': '•',  # Another bullet variant
+        '\uf0a7': '◦',  # Circle bullet
+    }
+
+    cleaned = text
+    for old, new in replacements.items():
+        cleaned = cleaned.replace(old, new)
+
+    # Remove any remaining (cid:XXX) patterns
+    import re
+    cleaned = re.sub(r'\(cid:\d+\)', '•', cleaned)
+
+    return cleaned
+
+
 def extract_pdf_text(file_path: Path) -> str:
     """
     Extract text from PDF using multiple strategies
@@ -41,7 +82,7 @@ def extract_pdf_text(file_path: Path) -> str:
         
         if text.strip():
             logger.info(f"      ✓ Extracted with pdfplumber")
-            return text
+            return clean_pdf_text(text)
     except ImportError:
         pass
     except Exception as e:
@@ -59,7 +100,7 @@ def extract_pdf_text(file_path: Path) -> str:
         
         if text.strip():
             logger.info(f"      ✓ Extracted with PyPDF2")
-            return text
+            return clean_pdf_text(text)
     except ImportError:
         pass
     except Exception as e:
@@ -77,7 +118,7 @@ def extract_pdf_text(file_path: Path) -> str:
         
         if text.strip():
             logger.info(f"      ✓ Extracted with pypdf")
-            return text
+            return clean_pdf_text(text)
     except ImportError:
         pass
     except Exception as e:

@@ -6,6 +6,7 @@ Part of the SCM Chatbot Agentic Architecture
 import logging
 from typing import Dict, Any
 import pandas as pd
+from ui_formatter import UIFormatter
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +70,15 @@ class AnalyticsAgent:
                 ("system", """You are a specialized Analytics Agent for revenue and performance analysis.
 Your expertise is in analyzing sales, products, and customer behavior.
 
+CRITICAL: Determine if the user is asking about:
+1. **POLICY/PROCEDURES** (guidelines, definitions, classifications, protocols, processes)
+   → If the input contains "Context from documents:", USE THAT CONTEXT to answer
+   → DO NOT query database tools for policy questions
+   → Extract and present the information from the provided document context
+
+2. **DATA/STATISTICS** (actual revenue, sales, customer counts, performance metrics)
+   → Use the available tools to query real operational data
+
 IMPORTANT INSTRUCTIONS:
 - Answer ONLY what the user specifically asks for
 - Be concise and direct - don't provide extra information unless requested
@@ -81,6 +91,7 @@ RESPONSE GUIDELINES:
 - "Show revenue analysis" → Provide comprehensive revenue statistics
 - "How many customers?" → Answer with just the count
 - "Analyze customer behavior" → Provide detailed customer insights
+- "What is the policy for X?" → Use the document context if provided
 
 Extract only the relevant information from tool results to answer the specific question."""),
                 ("human", "{input}"),
@@ -136,13 +147,19 @@ Extract only the relevant information from tool results to answer the specific q
         except Exception as e:
             return f"Error getting customer behavior: {e}"
 
-    def query(self, user_query: str) -> Dict[str, Any]:
+    def query(self, user_query: str, classification: Dict = None) -> Dict[str, Any]:
         """Process analytics query"""
         try:
-            # Try RAG context retrieval first
+            # Determine if should use RAG based on classification
+            should_use_rag = classification.get('use_rag', True) if classification else True
+            should_use_database = classification.get('use_database', True) if classification else True
+
+            logger.info(f"Analytics Agent - Use RAG: {should_use_rag} | Use Database: {should_use_database}")
+
+            # Try RAG context retrieval if classification allows it
             rag_context = None
             used_rag = False
-            if self.rag_module:
+            if self.rag_module and should_use_rag:
                 try:
                     rag_context = self.rag_module.retrieve_context(user_query)
                     if rag_context and len(rag_context.strip()) > 0:
@@ -171,6 +188,31 @@ Extract only the relevant information from tool results to answer the specific q
             else:
                 query_lower = user_query.lower()
 
+                # NEW: If classification says this is a POLICY ONLY question
+                if classification and classification.get('query_type') == 'policy':
+                    if used_rag and rag_context and len(rag_context.strip()) > 20:
+                        # Return RAG context only for policy questions
+                        response = UIFormatter.format_rag_context(rag_context)
+
+                        return {
+                            'response': response,
+                            'agent': 'Analytics Agent (Rule-Based) + RAG',
+                            'success': True,
+                            'used_rag': True,
+                            'classification': classification
+                        }
+                    else:
+                        # No RAG context found for policy question
+                        return {
+                            'response': "No policy documents found for this query. Please rephrase or ask a data question.",
+                            'agent': 'Analytics Agent (Rule-Based)',
+                            'success': True,
+                            'used_rag': False,
+                            'classification': classification
+                        }
+
+                # NEW: If classification says this is DATA ONLY or default - skip policy check
+                # Data/statistics queries
                 if any(word in query_lower for word in ['product', 'item', 'inventory']):
                     response = self._get_product_performance()
                 elif any(word in query_lower for word in ['customer', 'buyer', 'client']):
@@ -178,17 +220,20 @@ Extract only the relevant information from tool results to answer the specific q
                 else:
                     response = self._get_revenue_analysis()
 
-                # Append RAG context if available and meaningful
-                if used_rag and rag_context and len(rag_context.strip()) > 20 and "no relevant" not in rag_context.lower():
-                    response += f"\n\n📚 **Document Context:**\n{rag_context[:400]}"
-                    if len(rag_context) > 400:
-                        response += "..."
+                # Append RAG context only if classification allows it (mixed queries)
+                if used_rag and should_use_rag and rag_context and len(rag_context.strip()) > 20 and "no relevant" not in rag_context.lower():
+                    # Only append if this is a mixed query (both RAG and database)
+                    if classification and classification.get('query_type') == 'mixed':
+                        # Use UIFormatter for better RAG context formatting
+                        formatted_rag = UIFormatter.format_rag_context(rag_context)
+                        response += f"\n\n{formatted_rag}"
 
                 return {
                     'response': response,
                     'agent': 'Analytics Agent (Rule-Based)' + (' + RAG' if used_rag else ''),
                     'success': True,
-                    'used_rag': used_rag
+                    'used_rag': used_rag,
+                    'classification': classification
                 }
 
         except Exception as e:
