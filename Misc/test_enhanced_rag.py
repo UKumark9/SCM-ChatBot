@@ -6,6 +6,9 @@ Compares basic RAG vs Enhanced RAG with re-ranking, compression, and hybrid sear
 import sys
 from pathlib import Path
 
+# Ensure project root is on sys.path (works from any subdirectory)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 # Fix Windows console encoding
 if sys.platform == 'win32':
     import codecs

@@ -3,6 +3,10 @@ Test Intent Classification Fix
 Demonstrates that "What is the delivery delay rate?" now returns data, not policy documents
 """
 
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from intent_classifier import IntentClassifier
 
 # Initialize classifier

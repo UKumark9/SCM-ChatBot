@@ -12,7 +12,7 @@ from typing import Dict, Any
 import sys
 
 # Add modules to path
-sys.path.append(str(Path(__file__).parent))
+sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from modules.feature_store import FeatureStore, MLFeatures
 
