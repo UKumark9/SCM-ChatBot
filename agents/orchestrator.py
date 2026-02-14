@@ -84,11 +84,28 @@ class AgentOrchestrator:
             rag_module=rag_module
         )
 
+        # Initialize advanced forecasting engine (SARIMA)
+        forecasting_engine = None
+        try:
+            from tools.forecasting_engine import ForecastingEngine
+            forecasting_engine = ForecastingEngine(
+                orders_df=analytics_engine.orders,
+                order_items_df=analytics_engine.order_items,
+                payments_df=getattr(analytics_engine, 'payments', None),
+                products_df=getattr(analytics_engine, 'products', None),
+            )
+            logger.info("Advanced Forecasting Engine initialized (SARIMA — demand, revenue, delay rate, category)")
+        except ImportError:
+            logger.warning("ForecastingEngine not available (missing statsmodels/prophet)")
+        except Exception as e:
+            logger.warning(f"ForecastingEngine init failed: {e}")
+
         self.forecasting_agent = ForecastingAgent(
             analytics_engine=analytics_engine,
             llm_client=self.llm_client,
             use_langchain=self.use_langchain,
-            rag_module=rag_module
+            rag_module=rag_module,
+            forecasting_engine=forecasting_engine
         )
 
         self.data_query_agent = DataQueryAgent(
@@ -135,21 +152,32 @@ class AgentOrchestrator:
         }
 
         analytics_patterns = {
-            'keywords': ['revenue', 'sales', 'profit', 'customer', 'performance', 'order value'],
+            'keywords': ['revenue', 'sales', 'profit', 'performance', 'order value', 'behavior', 'analysis'],
             'phrases': ['total revenue', 'customer behavior', 'sales performance', 'revenue analysis',
-                       'product performance', 'top products', 'customer analysis']
+                       'product performance', 'customer analysis', 'revenue by', 'sales by']
         }
 
         forecast_patterns = {
-            'keywords': ['forecast', 'predict', 'future', 'demand', 'projection', 'estimate'],
+            'keywords': ['forecast', 'predict', 'future', 'demand', 'projection', 'estimate',
+                         'sarima', 'prophet', 'time series', 'seasonal'],
             'phrases': ['demand forecast', 'predict demand', 'future demand', 'forecast sales',
-                       'demand prediction', 'trend forecast']
+                       'demand prediction', 'trend forecast', 'forecast with sarima',
+                       'forecast with prophet', 'sarima forecast', 'prophet forecast',
+                       'time series forecast', 'seasonal forecast',
+                       'revenue forecast', 'forecast revenue', 'predict revenue',
+                       'delay rate forecast', 'forecast delay rate', 'predict delay rate',
+                       'category forecast', 'forecast category', 'category demand forecast',
+                       'each category', 'all categories', 'per category',
+                       'category comparison', 'compare categories', 'breakdown by category']
         }
 
         data_patterns = {
-            'keywords': ['show', 'list', 'get', 'find', 'display', 'retrieve'],
+            'keywords': ['show', 'list', 'get', 'find', 'display', 'retrieve', 'history', 'lookup', 'customers', 'orders', 'products', 'state'],
             'phrases': ['show me', 'list all', 'find order', 'get customer', 'display data',
-                       'order details']
+                       'order details', 'customer history', 'order history', 'customer order history',
+                       'orders for customer', 'top products', 'top categories', 'best selling',
+                       'customers in', 'orders in', 'orders from', 'orders between',
+                       'by state', 'state distribution', 'state breakdown', 'monthly trend']
         }
 
         # Calculate scores with phrase bonuses

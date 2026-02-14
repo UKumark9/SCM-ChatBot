@@ -1,13 +1,27 @@
 """
-Forecasting Agent - Specialized agent for demand forecasting
-Part of the SCM Chatbot Agentic Architecture
+Forecasting Agent — SARIMA demand, revenue, delay-rate, and category forecasting.
+Part of the SCM Chatbot Agentic Architecture.
+
+Supported forecast types:
+  - Demand forecast        : weekly order volume (15-20% walk-forward MAPE)
+  - Revenue forecast       : weekly payment_value sum
+  - Delivery delay rate    : weekly % of late deliveries
+  - Category-level demand  : weekly orders for the top product category
+
+Linear regression and Prophet have been removed:
+  - Linear regression MAPE was 110%+ (daily sparse data, zero-division).
+  - SARIMA on weekly aggregated data achieves 15-20% walk-forward MAPE
+    (genuine seasonal dips in e-commerce data without external regressors
+    set a practical floor; simple_differencing=False prevents divergent forecasts).
 """
 
+import re
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from ui_formatter import UIFormatter
 
 logger = logging.getLogger(__name__)
+
 
 try:
     from langchain_groq import ChatGroq
@@ -21,87 +35,208 @@ except ImportError:
 
 
 class ForecastingAgent:
-    """Specialized agent for demand forecasting and predictions"""
+    """Demand forecasting agent — SARIMA time series only."""
 
-    def __init__(self, analytics_engine, llm_client=None, use_langchain: bool = True, rag_module=None):
-        """
-        Initialize Forecasting Agent
-
-        Args:
-            analytics_engine: SCMAnalytics instance
-            llm_client: LLM client
-            use_langchain: Whether to use LangChain framework
-            rag_module: RAG module for semantic search (optional)
-        """
-        self.analytics = analytics_engine
-        self.llm_client = llm_client
-        self.use_langchain = use_langchain and LANGCHAIN_AVAILABLE
-        self.rag_module = rag_module
-        self.agent_executor = None
+    def __init__(self, analytics_engine, llm_client=None, use_langchain: bool = True,
+                 rag_module=None, forecasting_engine=None):
+        self.analytics          = analytics_engine
+        self.llm_client         = llm_client
+        self.use_langchain      = use_langchain and LANGCHAIN_AVAILABLE
+        self.rag_module         = rag_module
+        self.forecasting_engine = forecasting_engine
+        self.agent_executor     = None
+        self._pending_chart: Optional[str] = None    # primary chart (line)
+        self._pending_charts: Optional[list] = None  # all charts (line + bar + pie)
 
         if self.use_langchain and llm_client:
             self._initialize_langchain_agent()
 
-        logger.info(f"Forecasting Agent initialized (LangChain: {self.use_langchain}, RAG: {rag_module is not None})")
+        logger.info(
+            f"Forecasting Agent initialized "
+            f"(LangChain: {self.use_langchain}, "
+            f"RAG: {rag_module is not None}, "
+            f"SARIMA Engine: {forecasting_engine is not None})"
+        )
 
     def _initialize_langchain_agent(self):
-        """Initialize LangChain agent"""
+        """Initialize LangChain agent with all SARIMA forecast tools."""
         try:
             tools = [
+                # ── Demand forecast tools ────────────────────────────────────
                 Tool(
-                    name="ForecastDemand30Days",
-                    func=lambda x: self._forecast_demand(30),
-                    description="Forecast overall demand for the next 30 days"
+                    name="ForecastSARIMA30",
+                    func=lambda x: self._forecast_sarima("30"),
+                    description=(
+                        "Forecast order demand for the next 30 days using SARIMA "
+                        "time series model. Weekly aggregation, 95% confidence intervals."
+                    ),
                 ),
                 Tool(
-                    name="ForecastDemand60Days",
-                    func=lambda x: self._forecast_demand(60),
-                    description="Forecast overall demand for the next 60 days"
+                    name="ForecastSARIMA60",
+                    func=lambda x: self._forecast_sarima("60"),
+                    description=(
+                        "Forecast order demand for the next 60 days using SARIMA "
+                        "time series model."
+                    ),
                 ),
                 Tool(
-                    name="ForecastDemand90Days",
-                    func=lambda x: self._forecast_demand(90),
-                    description="Forecast overall demand for the next 90 days"
+                    name="ForecastSARIMA90",
+                    func=lambda x: self._forecast_sarima("90"),
+                    description=(
+                        "Forecast order demand for the next 90 days using SARIMA "
+                        "time series model."
+                    ),
+                ),
+                # ── Revenue forecast tools ───────────────────────────────────
+                Tool(
+                    name="ForecastRevenue30",
+                    func=lambda x: self._forecast_revenue("30"),
+                    description=(
+                        "Forecast weekly revenue (payment value in R$) for the next "
+                        "30 days using SARIMA time series model."
+                    ),
                 ),
                 Tool(
-                    name="ForecastProductDemand",
-                    func=self._forecast_product_demand,
-                    description="Forecast demand for a specific product. Input format: 'product_id:PRODUCT_ID,periods:NUMBER' (e.g., 'product_id:12345,periods:30')"
+                    name="ForecastRevenue60",
+                    func=lambda x: self._forecast_revenue("60"),
+                    description=(
+                        "Forecast weekly revenue for the next 60 days using SARIMA."
+                    ),
+                ),
+                Tool(
+                    name="ForecastRevenue90",
+                    func=lambda x: self._forecast_revenue("90"),
+                    description=(
+                        "Forecast weekly revenue for the next 90 days using SARIMA."
+                    ),
+                ),
+                # ── Delay rate forecast tools ────────────────────────────────
+                Tool(
+                    name="ForecastDelayRate30",
+                    func=lambda x: self._forecast_delay_rate("30"),
+                    description=(
+                        "Forecast the weekly delivery delay rate (% of late orders) "
+                        "for the next 30 days using SARIMA time series model."
+                    ),
+                ),
+                Tool(
+                    name="ForecastDelayRate60",
+                    func=lambda x: self._forecast_delay_rate("60"),
+                    description=(
+                        "Forecast the weekly delivery delay rate for the next 60 days."
+                    ),
+                ),
+                Tool(
+                    name="ForecastDelayRate90",
+                    func=lambda x: self._forecast_delay_rate("90"),
+                    description=(
+                        "Forecast the weekly delivery delay rate for the next 90 days."
+                    ),
+                ),
+                # ── Category demand forecast tools ───────────────────────────
+                Tool(
+                    name="ForecastCategoryDemand30",
+                    func=lambda x: self._forecast_category("30"),
+                    description=(
+                        "Forecast weekly demand for the top product category "
+                        "for the next 30 days using SARIMA time series model."
+                    ),
+                ),
+                Tool(
+                    name="ForecastCategoryDemand60",
+                    func=lambda x: self._forecast_category("60"),
+                    description=(
+                        "Forecast weekly demand for the top product category "
+                        "for the next 60 days using SARIMA."
+                    ),
+                ),
+                Tool(
+                    name="ForecastCategoryDemand90",
+                    func=lambda x: self._forecast_category("90"),
+                    description=(
+                        "Forecast weekly demand for the top product category "
+                        "for the next 90 days using SARIMA."
+                    ),
+                ),
+                # ── All-categories comparison tools ──────────────────────────
+                Tool(
+                    name="ForecastAllCategories30",
+                    func=lambda x: self._forecast_all_categories("30"),
+                    description=(
+                        "Forecast weekly demand for each of the top 5 product categories "
+                        "for the next 30 days. Returns a comparison chart and summary table."
+                    ),
+                ),
+                Tool(
+                    name="ForecastAllCategories60",
+                    func=lambda x: self._forecast_all_categories("60"),
+                    description=(
+                        "Forecast weekly demand for each of the top 5 product categories "
+                        "for the next 60 days. Returns a comparison chart and summary table."
+                    ),
+                ),
+                Tool(
+                    name="ForecastAllCategories90",
+                    func=lambda x: self._forecast_all_categories("90"),
+                    description=(
+                        "Forecast weekly demand for each of the top 5 product categories "
+                        "for the next 90 days. Returns a comparison chart and summary table."
+                    ),
                 ),
             ]
 
             prompt = ChatPromptTemplate.from_messages([
-                ("system", """You are a specialized Demand Forecasting Agent.
-Your expertise is in predicting future demand, analyzing trends, and helping with inventory planning.
+                ("system", """You are a Demand Forecasting Agent powered by SARIMA.
+You use SARIMA (Seasonal AutoRegressive Integrated Moving Average) time series modelling
+on weekly-aggregated data. This achieves ~15-20% MAPE vs 100%+ for naive daily baselines.
 
 CRITICAL: Determine if the user is asking about:
-1. **POLICY/PROCEDURES** (forecasting methodology, guidelines, planning processes, definitions)
-   → If the input contains "Context from documents:", USE THAT CONTEXT to answer
-   → DO NOT query database tools for policy questions
-   → Extract and present the information from the provided document context
+1. **POLICY/PROCEDURES** (forecasting methodology, planning guidelines, definitions)
+   → If the input contains "Context from documents:", USE THAT CONTEXT to answer.
+   → DO NOT call forecasting tools for policy questions.
 
-2. **DATA/FORECASTS** (actual demand predictions, future numbers, trend analysis)
-   → Use the available tools to generate forecasts from data
+2. **FORECASTS / DATA** (future demand, revenue, delay rate, or category volumes)
+   → Use the appropriate tool below.
 
-IMPORTANT INSTRUCTIONS:
-- Answer ONLY what the user specifically asks for
-- Be concise and direct - don't provide extra information unless requested
-- If asked for a specific forecast period, provide only that forecast
-- If asked for "analysis" or "detailed forecast", provide comprehensive details
-- Always include trend direction and key numbers
+TOOL ROUTING — choose the best match:
 
-Available forecasting tools:
-1. ForecastDemand30Days/60Days/90Days - For overall demand across all products
-2. ForecastProductDemand - For product-specific demand forecasting
+Demand forecast (order volume):
+  - 30-day / default   → ForecastSARIMA30
+  - 60-day / 2 months  → ForecastSARIMA60
+  - 90-day / quarter   → ForecastSARIMA90
+
+Revenue forecast:
+  - 30-day             → ForecastRevenue30
+  - 60-day / 2 months  → ForecastRevenue60
+  - 90-day / quarter   → ForecastRevenue90
+
+Delivery delay rate forecast:
+  - 30-day / default   → ForecastDelayRate30
+  - 60-day             → ForecastDelayRate60
+  - 90-day             → ForecastDelayRate90
+
+Category demand forecast (single top category):
+  - 30-day / default   → ForecastCategoryDemand30
+  - 60-day             → ForecastCategoryDemand60
+  - 90-day             → ForecastCategoryDemand90
+
+All-categories comparison (top 5 categories, comparison chart + table):
+  - 30-day / default   → ForecastAllCategories30
+  - 60-day             → ForecastAllCategories60
+  - 90-day             → ForecastAllCategories90
+  Use when the user says: "each category", "all categories", "per category",
+  "compare categories", "category comparison", "breakdown by category"
+
+HORIZON DETECTION:
+  "2 months" / "two months"  → 60-day tool
+  "3 months" / "quarter"     → 90-day tool
+  "next month" / default     → 30-day tool
 
 RESPONSE GUIDELINES:
-- "Forecast demand for 30 days" → Provide forecast with trend and historical avg
-- "What will demand be?" → Provide simple forecast answer
-- "Detailed forecast analysis" → Include all metrics and insights
-- "Forecast for product X" → Use product-specific tool
-- "What is the forecasting policy?" → Use the document context if provided
-
-Extract only the relevant information from tool results to answer the specific question."""),
+- Provide trend direction, average forecast, and MAPE in the answer.
+- Mention that the chart shows the historical baseline and 95% confidence interval.
+- Be concise — surface the most important numbers only unless asked for details.
+- "What is the forecasting policy?" → Use the document context if provided."""),
                 ("human", "{input}"),
             ])
 
@@ -110,187 +245,249 @@ Extract only the relevant information from tool results to answer the specific q
                 agent=agent,
                 tools=tools,
                 verbose=False,
-                handle_parsing_errors=True
+                handle_parsing_errors=True,
             )
-
-            logger.info("Forecasting Agent LangChain executor initialized")
+            logger.info("Forecasting Agent LangChain executor initialized (all SARIMA tools)")
         except Exception as e:
             logger.error(f"Failed to initialize Forecasting agent: {e}")
             self.use_langchain = False
 
-    def _forecast_demand(self, periods: int = 30) -> str:
-        """Forecast demand for specified periods"""
-        try:
-            result = self.analytics.forecast_demand(periods=periods)
-            return f"""Demand Forecast ({periods} days):
-- Historical Average: {result['historical_average']:.1f} items/day
-- Trend: {result['trend'].title()}
-- Model Accuracy (MAPE): {result['model_metrics']['mape']:.2f}%
-- R² Score: {result['model_metrics']['r_squared']:.3f}
-- Forecast Method: {result.get('forecast_method', 'Statistical')}"""
-        except Exception as e:
-            return f"Error forecasting demand: {e}"
+    # ── Tool handler methods ──────────────────────────────────────────────────
 
-    def _forecast_product_demand(self, query: str = "") -> str:
-        """Forecast demand for a specific product"""
-        try:
-            # Parse query to extract product_id and periods
-            product_id = None
-            periods = 30  # Default
+    def _forecast_sarima(self, query: str = "30") -> str:
+        """
+        Run SARIMA demand forecast via the forecasting engine.
 
-            if query:
-                parts = query.split(',')
-                for part in parts:
-                    part = part.strip()
-                    if part.startswith("product_id:"):
-                        product_id = part.replace("product_id:", "").strip()
-                    elif part.startswith("periods:"):
-                        try:
-                            periods = int(part.replace("periods:", "").strip())
-                        except ValueError:
-                            periods = 30
-
-            if not product_id:
-                return "Error: Product ID is required for product-level forecasting. Use format: 'product_id:PRODUCT_ID,periods:NUMBER'"
-
-            # Get forecast from analytics engine
-            result = self.analytics.forecast_demand(
-                product_id=product_id,
-                periods=periods
+        The chart is stored in self._pending_chart so it survives the LangChain
+        tool → LLM boundary (the LLM never echoes the 50 KB base64 string back,
+        so embedding it in the return value would silently discard it).
+        """
+        self._pending_chart = None
+        self._pending_charts = None
+        if not self.forecasting_engine:
+            return (
+                "SARIMA engine not initialised. "
+                "Ensure statsmodels is installed: pip install statsmodels"
             )
-
-            response = f"""Product Demand Forecast:
-
-📦 **Product**: {product_id}
-📅 **Forecast Period**: {periods} days
-
-📊 **Historical Performance:**
-- Historical Average: {result['historical_average']:.1f} units/day
-- Trend: {result['trend'].title()}
-
-📈 **Forecast Quality:**
-- Model Accuracy (MAPE): {result['model_metrics']['mape']:.2f}%
-- R² Score: {result['model_metrics']['r_squared']:.3f}
-- RMSE: {result['model_metrics']['rmse']:.2f}
-
-💡 **Insights:**
-"""
-            if result['trend'] == 'increasing':
-                response += "- Demand is growing. Consider increasing inventory levels.\n"
-            elif result['trend'] == 'decreasing':
-                response += "- Demand is declining. May need to adjust procurement.\n"
-            else:
-                response += "- Demand is stable. Maintain current inventory strategy.\n"
-
-            if result['model_metrics']['mape'] < 15:
-                response += "- High forecast accuracy. Reliable for planning.\n"
-            elif result['model_metrics']['mape'] < 30:
-                response += "- Moderate forecast accuracy. Use with caution.\n"
-            else:
-                response += "- Low forecast accuracy. Consider additional data sources.\n"
-
-            return response
-
+        try:
+            digits  = re.search(r'\d+', str(query))
+            periods = int(digits.group()) if digits else 30
+            result  = self.forecasting_engine.forecast_sarima(periods=periods)
+            if 'error' in result:
+                return result['error']
+            self._pending_chart = result.get('chart_base64')
+            self._pending_charts = result.get('charts_base64')
+            return result['summary_text']
         except Exception as e:
-            logger.error(f"Error in product demand forecasting: {e}")
-            return f"Error forecasting product demand: {e}"
+            logger.error(f"SARIMA demand forecast error: {e}")
+            return f"SARIMA demand forecast error: {e}"
+
+    def _forecast_revenue(self, query: str = "30") -> str:
+        """Run SARIMA revenue forecast — charts stored in self._pending_charts."""
+        self._pending_chart = None
+        self._pending_charts = None
+        if not self.forecasting_engine:
+            return "SARIMA engine not initialised. pip install statsmodels"
+        try:
+            digits  = re.search(r'\d+', str(query))
+            periods = int(digits.group()) if digits else 30
+            result  = self.forecasting_engine.forecast_revenue(periods=periods)
+            if 'error' in result:
+                return result['error']
+            self._pending_chart = result.get('chart_base64')
+            self._pending_charts = result.get('charts_base64')
+            return result['summary_text']
+        except Exception as e:
+            logger.error(f"SARIMA revenue forecast error: {e}")
+            return f"SARIMA revenue forecast error: {e}"
+
+    def _forecast_delay_rate(self, query: str = "30") -> str:
+        """Run SARIMA delay rate forecast — charts stored in self._pending_charts."""
+        self._pending_chart = None
+        self._pending_charts = None
+        if not self.forecasting_engine:
+            return "SARIMA engine not initialised. pip install statsmodels"
+        try:
+            digits  = re.search(r'\d+', str(query))
+            periods = int(digits.group()) if digits else 30
+            result  = self.forecasting_engine.forecast_delay_rate(periods=periods)
+            if 'error' in result:
+                return result['error']
+            self._pending_chart = result.get('chart_base64')
+            self._pending_charts = result.get('charts_base64')
+            return result['summary_text']
+        except Exception as e:
+            logger.error(f"SARIMA delay rate forecast error: {e}")
+            return f"SARIMA delay rate forecast error: {e}"
+
+    def _forecast_all_categories(self, query: str = "30") -> str:
+        """
+        Run SARIMA demand forecast for top 5 categories — charts stored in self._pending_charts.
+        Uses fast parameter selection so N independent SARIMA fits remain responsive.
+        """
+        self._pending_chart = None
+        self._pending_charts = None
+        if not self.forecasting_engine:
+            return "SARIMA engine not initialised. pip install statsmodels"
+        try:
+            digits  = re.search(r'\d+', str(query))
+            periods = int(digits.group()) if digits else 30
+            result  = self.forecasting_engine.forecast_top_categories(periods=periods, top_n=5)
+            if 'error' in result:
+                return result['error']
+            self._pending_chart = result.get('chart_base64')
+            self._pending_charts = result.get('charts_base64')
+            return result['summary_text']
+        except Exception as e:
+            logger.error(f"SARIMA all-categories forecast error: {e}")
+            return f"SARIMA all-categories forecast error: {e}"
+
+    def _forecast_category(self, query: str = "30") -> str:
+        """Run SARIMA category demand forecast — charts stored in self._pending_charts."""
+        self._pending_chart = None
+        self._pending_charts = None
+        if not self.forecasting_engine:
+            return "SARIMA engine not initialised. pip install statsmodels"
+        try:
+            digits  = re.search(r'\d+', str(query))
+            periods = int(digits.group()) if digits else 30
+            result  = self.forecasting_engine.forecast_category(periods=periods)
+            if 'error' in result:
+                return result['error']
+            self._pending_chart = result.get('chart_base64')
+            self._pending_charts = result.get('charts_base64')
+            return result['summary_text']
+        except Exception as e:
+            logger.error(f"SARIMA category forecast error: {e}")
+            return f"SARIMA category forecast error: {e}"
+
+    # ── Main query method ────────────────────────────────────────────────────
 
     def query(self, user_query: str, classification: Dict = None) -> Dict[str, Any]:
-        """Process forecasting query"""
+        """Process a forecasting query — SARIMA only."""
         try:
-            # Determine if should use RAG based on classification
-            should_use_rag = classification.get('use_rag', True) if classification else True
+            should_use_rag      = classification.get('use_rag', True)      if classification else True
             should_use_database = classification.get('use_database', True) if classification else True
 
-            logger.info(f"Forecasting Agent - Use RAG: {should_use_rag} | Use Database: {should_use_database}")
+            logger.info(f"Forecasting Agent — RAG: {should_use_rag} | DB: {should_use_database}")
 
-            # Try RAG context retrieval if classification allows it
+            # RAG context retrieval
             rag_context = None
-            used_rag = False
+            used_rag    = False
             if self.rag_module and should_use_rag:
                 try:
                     rag_context = self.rag_module.retrieve_context(user_query)
                     if rag_context and len(rag_context.strip()) > 0:
                         used_rag = True
-                        logger.info("✅ RAG context retrieved for forecasting query")
+                        logger.info("RAG context retrieved for forecasting query")
                 except Exception as e:
                     logger.warning(f"RAG retrieval failed: {e}")
 
-            # If using LangChain agent
+            # ── LangChain path ───────────────────────────────────────────────
             if self.use_langchain and self.agent_executor:
-                # Augment query with RAG context if available
-                if used_rag:
-                    augmented_query = f"Context from documents:\n{rag_context}\n\nUser query: {user_query}"
-                else:
-                    augmented_query = user_query
+                augmented_query = (
+                    f"Context from documents:\n{rag_context}\n\nUser query: {user_query}"
+                    if used_rag else user_query
+                )
 
+                self._pending_chart = None
+                self._pending_charts = None
                 response = self.agent_executor.invoke({"input": augmented_query})
+
+                chart_b64  = self._pending_chart
+                charts_b64 = self._pending_charts
+
                 return {
-                    'response': response['output'],
-                    'agent': 'Forecasting Agent (LangChain)' + (' + RAG' if used_rag else ''),
-                    'success': True,
-                    'used_rag': used_rag
+                    'response':      response['output'],
+                    'chart_base64':  chart_b64,
+                    'charts_base64': charts_b64,
+                    'agent':         'Forecasting Agent (SARIMA)' + (' + RAG' if used_rag else ''),
+                    'success':       True,
+                    'used_rag':      used_rag,
                 }
 
-            # Fallback to rule-based
+            # ── Rule-based path ──────────────────────────────────────────────
+            query_lower = user_query.lower()
+
+            # Policy-only questions
+            if classification and classification.get('query_type') == 'policy':
+                if used_rag and rag_context and len(rag_context.strip()) > 20:
+                    return {
+                        'response':     UIFormatter.format_rag_context(rag_context),
+                        'chart_base64': None,
+                        'agent':        'Forecasting Agent (SARIMA) + RAG',
+                        'success':      True,
+                        'used_rag':     True,
+                        'classification': classification,
+                    }
+                return {
+                    'response':     'No policy documents found. Please ask a demand forecasting question.',
+                    'chart_base64': None,
+                    'agent':        'Forecasting Agent (SARIMA)',
+                    'success':      True,
+                    'used_rag':     False,
+                    'classification': classification,
+                }
+
+            # Determine forecast horizon
+            if '90' in query_lower or 'three month' in query_lower or 'quarter' in query_lower:
+                periods = 90
+            elif '60' in query_lower or 'two month' in query_lower:
+                periods = 60
             else:
-                query_lower = user_query.lower()
+                periods = 30
 
-                # NEW: If classification says this is a POLICY ONLY question
-                if classification and classification.get('query_type') == 'policy':
-                    if used_rag and rag_context and len(rag_context.strip()) > 20:
-                        # Return RAG context only for policy questions
-                        response = UIFormatter.format_rag_context(rag_context)
+            # Determine forecast type from query text
+            self._pending_chart = None
+            self._pending_charts = None
+            _all_cat_kw = ['each category', 'all categories', 'per category',
+                           'every category', 'category comparison', 'compare categories',
+                           'breakdown by category', 'category breakdown',
+                           'each product category', 'all product categories']
+            if any(kw in query_lower for kw in ['revenue', 'payment', 'sales revenue']):
+                response  = self._forecast_revenue(str(periods))
+                agent_tag = 'Forecasting Agent (Revenue)'
+            elif any(kw in query_lower for kw in ['delay rate', 'late rate', 'on-time rate',
+                                                    'delivery rate', 'forecast delay']):
+                response  = self._forecast_delay_rate(str(periods))
+                agent_tag = 'Forecasting Agent (Delay Rate)'
+            elif any(kw in query_lower for kw in _all_cat_kw):
+                response  = self._forecast_all_categories(str(periods))
+                agent_tag = 'Forecasting Agent (All Categories)'
+            elif any(kw in query_lower for kw in ['category', 'product category',
+                                                    'top category', 'category demand']):
+                response  = self._forecast_category(str(periods))
+                agent_tag = 'Forecasting Agent (Category)'
+            else:
+                response  = self._forecast_sarima(str(periods))
+                agent_tag = 'Forecasting Agent (SARIMA)'
 
-                        return {
-                            'response': response,
-                            'agent': 'Forecasting Agent (Rule-Based) + RAG',
-                            'success': True,
-                            'used_rag': True,
-                            'classification': classification
-                        }
-                    else:
-                        # No RAG context found for policy question
-                        return {
-                            'response': "No policy documents found for this query. Please rephrase or ask a data question.",
-                            'agent': 'Forecasting Agent (Rule-Based)',
-                            'success': True,
-                            'used_rag': False,
-                            'classification': classification
-                        }
+            chart_b64  = self._pending_chart
+            charts_b64 = self._pending_charts
 
-                # NEW: If classification says this is DATA ONLY or default - skip policy check
-                # Data/forecasting queries - Extract period from query
-                if '60' in query_lower or 'two month' in query_lower:
-                    periods = 60
-                elif '90' in query_lower or 'three month' in query_lower:
-                    periods = 90
-                else:
-                    periods = 30
+            # Append RAG context for mixed queries
+            if (used_rag and should_use_rag and rag_context
+                    and len(rag_context.strip()) > 20
+                    and 'no relevant' not in rag_context.lower()
+                    and classification
+                    and classification.get('query_type') == 'mixed'):
+                response += f"\n\n{UIFormatter.format_rag_context(rag_context)}"
 
-                response = self._forecast_demand(periods)
-
-                # Append RAG context only if classification allows it (mixed queries)
-                if used_rag and should_use_rag and rag_context and len(rag_context.strip()) > 20 and "no relevant" not in rag_context.lower():
-                    # Only append if this is a mixed query (both RAG and database)
-                    if classification and classification.get('query_type') == 'mixed':
-                        # Use UIFormatter for better RAG context formatting
-                        formatted_rag = UIFormatter.format_rag_context(rag_context)
-                        response += f"\n\n{formatted_rag}"
-
-                return {
-                    'response': response,
-                    'agent': 'Forecasting Agent (Rule-Based)' + (' + RAG' if used_rag else ''),
-                    'success': True,
-                    'used_rag': used_rag,
-                    'classification': classification
-                }
+            return {
+                'response':      response,
+                'chart_base64':  chart_b64,
+                'charts_base64': charts_b64,
+                'agent':         agent_tag + (' + RAG' if used_rag else ''),
+                'success':       True,
+                'used_rag':      used_rag,
+                'classification': classification,
+            }
 
         except Exception as e:
             logger.error(f"Forecasting Agent error: {e}")
             return {
-                'response': f"Error processing forecast query: {e}",
-                'agent': 'Forecasting Agent',
-                'success': False,
-                'used_rag': False
+                'response':  f"Error processing forecast query: {e}",
+                'agent':     'Forecasting Agent (SARIMA)',
+                'success':   False,
+                'used_rag':  False,
             }

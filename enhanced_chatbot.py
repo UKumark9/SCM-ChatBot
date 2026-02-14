@@ -640,21 +640,14 @@ What would you like to know?"""
 
     def _build_agent_info(self, agent: str, model: str, complexity: str, rag_used: bool) -> str:
         """Build agent execution information footer"""
-
-        # Color coding based on agent type
-        agent_icon = "🤖" if "AI" in agent else "⚙️"
-
-        info = f"\n\n{'─' * 60}\n"
-        info += f"{agent_icon} **Agent**: {agent}\n"
-        info += f"📋 **Model**: {model}\n"
-        info += f"🎯 **Query Complexity**: {complexity.title()}\n"
-
+        parts = [agent, model, complexity.title()]
         if rag_used:
-            info += f"🔍 **RAG**: Enabled (Semantic Search)\n"
-
-        info += f"{'─' * 60}"
-
-        return info
+            parts.append("Policy Docs")
+        body = " | ".join(parts)
+        return (
+            f'\n\n<p style="font-size:0.75em;font-style:italic;opacity:0.6;margin-top:4px">'
+            f'{body}</p>'
+        )
 
     def clear_history(self):
         """Clear conversation history"""

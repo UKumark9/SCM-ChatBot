@@ -4,8 +4,15 @@ Part of the SCM Chatbot Agentic Architecture
 """
 
 import logging
-from typing import Dict, Any
+import io
+import base64
+from typing import Dict, Any, Optional
 import pandas as pd
+
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
 from ui_formatter import UIFormatter
 
 logger = logging.getLogger(__name__)
@@ -147,6 +154,139 @@ Extract only the relevant information from tool results to answer the specific q
         except Exception as e:
             return f"Error getting customer behavior: {e}"
 
+    # ── Chart generation ──────────────────────────────────────────────────────
+
+    def _generate_chart_base64(self, fig) -> Optional[str]:
+        """Encode a matplotlib figure to base64 PNG string."""
+        try:
+            buf = io.BytesIO()
+            fig.savefig(buf, format='png', bbox_inches='tight', dpi=120)
+            buf.seek(0)
+            encoded = base64.b64encode(buf.read()).decode('utf-8')
+            plt.close(fig)
+            return encoded
+        except Exception as e:
+            logger.error(f"Chart encoding error: {e}")
+            plt.close(fig)
+            return None
+
+    def _chart_revenue(self) -> Optional[str]:
+        """Monthly revenue line chart."""
+        try:
+            result = self.analytics.analyze_revenue_trends()
+            monthly = result.get('monthly_revenue', {})
+            if not monthly:
+                return None
+
+            labels = sorted(monthly.keys())
+            values = [monthly[k] / 1000 for k in labels]  # convert to thousands
+
+            fig, ax = plt.subplots(figsize=(9, 3.8))
+            fig.patch.set_facecolor('#1e293b')
+            ax.set_facecolor('#0f172a')
+
+            ax.plot(range(len(labels)), values, color='#6366f1', linewidth=2.2,
+                    marker='o', markersize=4, markerfacecolor='#818cf8')
+            ax.fill_between(range(len(labels)), values, alpha=0.15, color='#6366f1')
+
+            # x-axis labels — show every 3rd to avoid crowding
+            step = max(1, len(labels) // 8)
+            ax.set_xticks(range(0, len(labels), step))
+            ax.set_xticklabels([labels[i] for i in range(0, len(labels), step)],
+                               rotation=35, ha='right', fontsize=7.5, color='#94a3b8')
+            ax.tick_params(axis='y', labelcolor='#94a3b8', labelsize=8)
+            ax.set_ylabel('Revenue (K $)', color='#94a3b8', fontsize=8.5)
+            ax.set_title('Monthly Revenue', color='#e2e8f0', fontsize=10, fontweight='bold', pad=8)
+            ax.spines[:].set_color('#334155')
+            ax.grid(axis='y', color='#334155', alpha=0.5, linewidth=0.6)
+            ax.tick_params(colors='#475569')
+            fig.tight_layout()
+            return self._generate_chart_base64(fig)
+        except Exception as e:
+            logger.error(f"Revenue chart error: {e}")
+            return None
+
+    def _chart_products(self) -> Optional[str]:
+        """Top product categories horizontal bar chart."""
+        try:
+            result = self.analytics.analyze_product_performance()
+            cat_perf = result.get('category_performance', {})
+            price_data = cat_perf.get('price', {})
+            if not price_data:
+                return None
+
+            # Sort and take top 10
+            sorted_cats = sorted(price_data.items(), key=lambda x: x[1], reverse=True)[:10]
+            labels = [str(k)[:22] for k, _ in sorted_cats]
+            values = [v / 1000 for _, v in sorted_cats]
+
+            fig, ax = plt.subplots(figsize=(9, 4.2))
+            fig.patch.set_facecolor('#1e293b')
+            ax.set_facecolor('#0f172a')
+
+            bars = ax.barh(range(len(labels)), values, color='#6366f1', height=0.65)
+            # Gradient-like effect: lighter shade on top bar
+            if bars:
+                bars[0].set_color('#818cf8')
+
+            ax.set_yticks(range(len(labels)))
+            ax.set_yticklabels(labels[::-1] if False else labels,
+                               fontsize=7.5, color='#94a3b8')
+            ax.invert_yaxis()
+            ax.tick_params(axis='x', labelcolor='#94a3b8', labelsize=8)
+            ax.set_xlabel('Revenue (K $)', color='#94a3b8', fontsize=8.5)
+            ax.set_title('Top Categories by Revenue', color='#e2e8f0',
+                         fontsize=10, fontweight='bold', pad=8)
+            ax.spines[:].set_color('#334155')
+            ax.grid(axis='x', color='#334155', alpha=0.5, linewidth=0.6)
+            fig.tight_layout()
+            return self._generate_chart_base64(fig)
+        except Exception as e:
+            logger.error(f"Products chart error: {e}")
+            return None
+
+    def _chart_customers(self) -> Optional[str]:
+        """Customers by state bar chart."""
+        try:
+            result = self.analytics.analyze_customer_behavior()
+            by_state = result.get('customers_by_state', {})
+            if not by_state:
+                return None
+
+            sorted_states = sorted(by_state.items(), key=lambda x: x[1], reverse=True)[:12]
+            labels = [str(k) for k, _ in sorted_states]
+            values = [v for _, v in sorted_states]
+
+            fig, ax = plt.subplots(figsize=(9, 3.8))
+            fig.patch.set_facecolor('#1e293b')
+            ax.set_facecolor('#0f172a')
+
+            bar_colors = ['#818cf8' if i == 0 else '#6366f1' for i in range(len(labels))]
+            ax.bar(range(len(labels)), values, color=bar_colors, width=0.65)
+
+            ax.set_xticks(range(len(labels)))
+            ax.set_xticklabels(labels, fontsize=8, color='#94a3b8')
+            ax.tick_params(axis='y', labelcolor='#94a3b8', labelsize=8)
+            ax.set_ylabel('Customers', color='#94a3b8', fontsize=8.5)
+            ax.set_title('Customers by State', color='#e2e8f0',
+                         fontsize=10, fontweight='bold', pad=8)
+            ax.spines[:].set_color('#334155')
+            ax.grid(axis='y', color='#334155', alpha=0.5, linewidth=0.6)
+            fig.tight_layout()
+            return self._generate_chart_base64(fig)
+        except Exception as e:
+            logger.error(f"Customers chart error: {e}")
+            return None
+
+    def _get_chart_for_query(self, query_lower: str) -> Optional[str]:
+        """Return appropriate chart based on query keywords."""
+        if any(w in query_lower for w in ['product', 'item', 'inventory', 'category']):
+            return self._chart_products()
+        elif any(w in query_lower for w in ['customer', 'buyer', 'client', 'state']):
+            return self._chart_customers()
+        else:
+            return self._chart_revenue()
+
     def query(self, user_query: str, classification: Dict = None) -> Dict[str, Any]:
         """Process analytics query"""
         try:
@@ -177,8 +317,16 @@ Extract only the relevant information from tool results to answer the specific q
                     augmented_query = user_query
 
                 response = self.agent_executor.invoke({"input": augmented_query})
+
+                # Generate chart for data queries (skip for policy-only)
+                chart_b64 = None
+                is_policy = classification and classification.get('query_type') == 'policy'
+                if not is_policy and should_use_database:
+                    chart_b64 = self._get_chart_for_query(user_query.lower())
+
                 return {
                     'response': response['output'],
+                    'chart_base64': chart_b64,
                     'agent': 'Analytics Agent (LangChain)' + (' + RAG' if used_rag else ''),
                     'success': True,
                     'used_rag': used_rag
@@ -191,11 +339,12 @@ Extract only the relevant information from tool results to answer the specific q
                 # NEW: If classification says this is a POLICY ONLY question
                 if classification and classification.get('query_type') == 'policy':
                     if used_rag and rag_context and len(rag_context.strip()) > 20:
-                        # Return RAG context only for policy questions
+                        # Return RAG context only for policy questions (no chart)
                         response = UIFormatter.format_rag_context(rag_context)
 
                         return {
                             'response': response,
+                            'chart_base64': None,
                             'agent': 'Analytics Agent (Rule-Based) + RAG',
                             'success': True,
                             'used_rag': True,
@@ -205,6 +354,7 @@ Extract only the relevant information from tool results to answer the specific q
                         # No RAG context found for policy question
                         return {
                             'response': "No policy documents found for this query. Please rephrase or ask a data question.",
+                            'chart_base64': None,
                             'agent': 'Analytics Agent (Rule-Based)',
                             'success': True,
                             'used_rag': False,
@@ -220,6 +370,9 @@ Extract only the relevant information from tool results to answer the specific q
                 else:
                     response = self._get_revenue_analysis()
 
+                # Generate chart for data queries
+                chart_b64 = self._get_chart_for_query(query_lower)
+
                 # Append RAG context only if classification allows it (mixed queries)
                 if used_rag and should_use_rag and rag_context and len(rag_context.strip()) > 20 and "no relevant" not in rag_context.lower():
                     # Only append if this is a mixed query (both RAG and database)
@@ -230,6 +383,7 @@ Extract only the relevant information from tool results to answer the specific q
 
                 return {
                     'response': response,
+                    'chart_base64': chart_b64,
                     'agent': 'Analytics Agent (Rule-Based)' + (' + RAG' if used_rag else ''),
                     'success': True,
                     'used_rag': used_rag,

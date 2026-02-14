@@ -30,13 +30,21 @@ class IntentClassifier:
         # Data question indicators
         self.data_indicators = {
             'metrics': ['rate', 'count', 'number', 'total', 'average', 'percentage', 'how many',
-                       'how much', 'actual', 'current', 'real', 'measured'],
+                       'how much', 'actual', 'current', 'real', 'measured',
+                       'delivery', 'shipment', 'order', 'supplier'],
             'verbs': ['show', 'list', 'get', 'find', 'display', 'retrieve', 'calculate',
                      'compute', 'analyze', 'report'],
             'time_references': ['today', 'yesterday', 'this week', 'last month', 'current',
                                'recent', 'historical', 'trend', 'over time'],
             'data_requests': ['from database', 'from data', 'actual data', 'real data',
                              'calculated', 'measured value'],
+            # Forecasting is always a data action — never a policy lookup
+            'forecast_actions': ['forecast', 'predict', 'projection', 'demand forecast',
+                                 'predict demand', 'future demand', 'demand prediction',
+                                 'forecast demand', 'sarima', 'time series',
+                                 'revenue forecast', 'forecast revenue', 'predict revenue',
+                                 'delay rate forecast', 'forecast delay rate', 'predict delay',
+                                 'category forecast', 'forecast category'],
         }
 
         # Domain detection (for agent routing)
@@ -50,8 +58,17 @@ class IntentClassifier:
                 'phrases': ['total revenue', 'customer behavior', 'sales performance']
             },
             'forecasting': {
-                'keywords': ['forecast', 'predict', 'future', 'demand', 'projection', 'estimate'],
-                'phrases': ['demand forecast', 'predict demand', 'future demand']
+                'keywords': ['forecast', 'predict', 'future', 'demand', 'projection', 'estimate',
+                             'sarima', 'prophet', 'time series', 'seasonal'],
+                'phrases': ['demand forecast', 'predict demand', 'future demand',
+                            'demand projection', 'forecast demand', 'show forecast',
+                            'forecast with sarima', 'sarima forecast', 'time series forecast',
+                            'revenue forecast', 'forecast revenue', 'predict revenue',
+                            'delay rate forecast', 'forecast delay rate', 'predict delay rate',
+                            'category forecast', 'forecast category', 'category demand forecast',
+                            'each category', 'all categories', 'per category',
+                            'every category', 'category comparison', 'compare categories',
+                            'breakdown by category', 'each product category']
             },
             'data_query': {
                 'keywords': ['show', 'list', 'get', 'find', 'display', 'retrieve'],
@@ -76,25 +93,26 @@ class IntentClassifier:
         data_score = self._calculate_data_score(query_lower)
 
         # Determine query type
-        if policy_score > data_score * 1.5:  # Strong policy signal
+        if policy_score > data_score * 1.2:  # Policy signal dominates
             query_type = 'policy'
-            confidence = min(policy_score / 10.0, 0.95)
+            confidence = min(0.5 + policy_score / 12.0, 0.95)
             use_rag = True
             use_database = False
-        elif data_score > policy_score * 1.5:  # Strong data signal
+        elif data_score > policy_score * 1.2:  # Data signal dominates
             query_type = 'data'
-            confidence = min(data_score / 10.0, 0.95)
+            confidence = min(0.5 + data_score / 12.0, 0.95)
             use_rag = False
             use_database = True
         elif policy_score > 2 and data_score > 2:  # Both signals present
             query_type = 'mixed'
-            confidence = 0.7
+            confidence = min(0.6 + (policy_score + data_score) / 20.0, 0.90)
             use_rag = True
             use_database = True
         else:
-            # Default to data query if unclear
+            # Default to data query; base confidence on whichever score is higher
             query_type = 'data'
-            confidence = 0.5
+            best_score = max(policy_score, data_score)
+            confidence = min(0.5 + best_score / 12.0, 0.80)
             use_rag = False
             use_database = True
 
@@ -161,6 +179,11 @@ class IntentClassifier:
         for data_req in self.data_indicators['data_requests']:
             if data_req in query_lower:
                 score += 4.0  # Very strong data signal
+
+        # Forecasting terms are unambiguously data actions — override any policy signal
+        for fc_term in self.data_indicators['forecast_actions']:
+            if fc_term in query_lower:
+                score += 5.0  # Strongest possible data signal
 
         return score
 
