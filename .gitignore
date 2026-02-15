@@ -1,0 +1,72 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# API Keys & Secrets - NEVER COMMIT!
+.env
+*.env
+.env.local
+.env.production
+api_keys.txt
+secrets.py
+.claude
+
+# Large Data Files
+*.csv
+data/train/*.csv
+data/test/*.csv
+
+# Generated Runtime Data
+data/metrics_log.jsonl
+data/metrics_*.jsonl
+data/feature_store/
+data/feature_store_test/
+data/business_docs/
+data/test_docs/
+
+# Mount Points
+mnt/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+logs/
+*.log
+
+# Vector DB & Models
+*.index
+*.pkl
+vector_db/
+*.faiss
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Temporary Files
+*.tmp
+*.bak
+*.swp
+*~

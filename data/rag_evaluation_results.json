@@ -1,0 +1,57 @@
+{
+  "aggregate_metrics": {
+    "mean_context_relevance": 0.369092471712827,
+    "mean_precision": 0.4,
+    "mean_recall": 1.0,
+    "mean_f1_score": 0.5714285714285715,
+    "mean_mrr": 1.0,
+    "std_context_relevance": 0.033104045724976904,
+    "std_precision": 0.0,
+    "std_recall": 0.0
+  },
+  "per_query_results": [
+    {
+      "query": "What are severity levels for product delays?",
+      "relevance": {
+        "keyword_relevance": 0.011848617112704234,
+        "semantic_relevance": 0.483820373094645,
+        "position_weighted_relevance": 0.5050780575385756,
+        "ground_truth_similarity": 0.6248931884765625,
+        "overall_relevance": 0.40641005905562183
+      },
+      "precision_recall": {
+        "precision_at_k": 0.4,
+        "recall_at_k": 1.0,
+        "f1_score": 0.5714285714285715,
+        "true_positives": 2,
+        "false_positives": 3,
+        "false_negatives": 0,
+        "mean_reciprocal_rank": 1.0,
+        "average_precision": 1.0,
+        "k": 5
+      }
+    },
+    {
+      "query": "Supplier quality procedures",
+      "relevance": {
+        "keyword_relevance": 0.007871996322789641,
+        "semantic_relevance": 0.5528081432360682,
+        "position_weighted_relevance": 0.56406669220587,
+        "overall_relevance": 0.3749156105882426
+      },
+      "precision_recall": null
+    },
+    {
+      "query": "Transportation logistics policy",
+      "relevance": {
+        "keyword_relevance": 0.012222864404359067,
+        "semantic_relevance": 0.47566964660750577,
+        "position_weighted_relevance": 0.489962725471985,
+        "overall_relevance": 0.3259517454946166
+      },
+      "precision_recall": null
+    }
+  ],
+  "test_date": "2026-02-01T12:43:41.951087",
+  "num_queries": 3
+}
