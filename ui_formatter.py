@@ -105,6 +105,7 @@ class UIFormatter:
         if "Based on policy documents:" in text:
             text = text.replace("Based on policy documents:", "\n### Policy Documents\n")
 
+        text = re.sub(r'\[Source: ([^\]]+)\]', r'\n*Source: \1*\n', text)
         text = re.sub(r'\[Relevance: ([\d\.]+)\]', r'\n**Relevance:** `\1`\n', text)
         text = UIFormatter._enhance_sections(text)
         text = text.strip()
@@ -196,8 +197,9 @@ class UIFormatter:
                     "You are a supply chain management expert. Using ONLY the provided document excerpts, "
                     "give a clear, concise answer to the user's question. "
                     "Use bullet points and bold key terms for readability. "
+                    "When citing information, mention the source document name in italics, e.g. *filename.pdf*. "
                     "If the documents don't fully answer the question, say what you found and note the gap. "
-                    "Do NOT mention document numbers or relevance scores."
+                    "Do NOT mention relevance scores or chunk numbers."
                 )),
                 HumanMessage(content=f"Documents:\n{context}\n\nQuestion: {query}")
             ]
@@ -227,13 +229,25 @@ class UIFormatter:
     def _format_single_document(doc: str, index: int) -> str:
         lines = doc.split('\n')
         formatted = []
-        formatted.append(f"#### Document {index}")
+        doc_name = None
+
+        # Extract source name first
+        for line in lines:
+            m = re.match(r'\[Source: (.+)\]', line.strip())
+            if m:
+                doc_name = m.group(1)
+                break
+
+        heading = f"#### Document {index}" + (f" — *{doc_name}*" if doc_name else "")
+        formatted.append(heading)
         formatted.append("")
 
         for line in lines:
             line = line.strip()
             if not line:
                 continue
+            if line.startswith('[Source:'):
+                continue  # Already shown in heading
             if line.startswith('[Relevance:'):
                 score = re.search(r'[\d\.]+', line)
                 if score:

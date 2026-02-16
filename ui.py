@@ -1050,10 +1050,13 @@ def run_ui(app):
             --link-text-color-hover: #6d8f9a !important;
         }
 
-        /* ═══ THEME TOGGLE STYLING ═══ */
-        .theme-toggle { margin-bottom: 8px; }
-        .theme-toggle .gr-radio-row { gap: 6px !important; }
-        .theme-toggle label span { font-size: 0.85rem !important; }
+        /* ═══ THEME BUTTONS (inline in user bar) ═══ */
+        .theme-btns { display: flex; gap: 2px; margin-left: auto; flex-shrink: 0; }
+        .theme-btn { background: none; border: 1px solid transparent; border-radius: 6px;
+            cursor: pointer; font-size: 1rem; line-height: 1; padding: 3px 5px;
+            color: #94a3b8; transition: background 0.15s, border-color 0.15s; }
+        .theme-btn:hover { background: rgba(99,102,241,0.15); border-color: #6366f1; }
+        .theme-btn.active { background: rgba(99,102,241,0.2); border-color: #818cf8; color: #f1f5f9; }
 
         /* ═══ USER INFO BAR ═══ */
         .user-info-bar {
@@ -1065,6 +1068,7 @@ def run_ui(app):
             border-radius: 10px;
             padding: 10px 14px;
             margin-bottom: 6px;
+            box-sizing: border-box;
         }
         .user-info-warn { border-color: rgba(234,179,8,0.35); background: rgba(234,179,8,0.06); }
         .user-avatar { font-size: 1.3rem; line-height: 1; }
@@ -1073,6 +1077,8 @@ def run_ui(app):
         .user-role { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
         .login-link { color: #818cf8; font-size: 0.8rem; text-decoration: none; }
         .login-link:hover { text-decoration: underline; }
+        .signout-link { color: #f87171; font-size: 0.78rem; text-decoration: none; opacity: 0.85; }
+        .signout-link:hover { text-decoration: underline; opacity: 1; }
 
         /* ═══ LOGOUT BUTTON ═══ */
         .logout-btn { margin-bottom: 12px !important; width: 100% !important; }
@@ -1378,31 +1384,38 @@ def run_ui(app):
 
                         # Sidebar
                         with gr.Column(scale=1, min_width=280):
-                            # ── User info + logout ──
+                            # ── User info + theme toggle (single cell) ──
+                            _TB = (
+                                '<div class="theme-btns">'
+                                '<button class="theme-btn active" title="Dark" onclick="'
+                                "var c=document.querySelector('.gradio-container');if(c)c.classList.remove('theme-light');"
+                                "this.parentNode.querySelectorAll('.theme-btn').forEach(function(b){b.classList.remove('active')});"
+                                'this.classList.add(\'active\');">🌙</button>'
+                                '<button class="theme-btn" title="Light" onclick="'
+                                "var c=document.querySelector('.gradio-container');if(c)c.classList.add('theme-light');"
+                                "this.parentNode.querySelectorAll('.theme-btn').forEach(function(b){b.classList.remove('active')});"
+                                'this.classList.add(\'active\');">☀️</button>'
+                                '</div>'
+                            )
                             user_info = gr.HTML(
-                                value='<div class="user-info-bar"><span class="user-avatar">👤</span>'
-                                      '<span class="user-details"><span class="user-name">Loading…</span>'
-                                      '<span class="user-role"></span></span></div>'
+                                value=(
+                                    '<div class="user-info-bar"><span class="user-avatar">👤</span>'
+                                    '<span class="user-details"><span class="user-name">Loading…</span>'
+                                    f'<span class="user-role"></span></span>{_TB}</div>'
+                                )
                             )
                             logout_btn = gr.Button(
-                                "⏻  Logout",
+                                "⏻  Sign Out",
                                 variant="secondary",
                                 size="sm",
-                                elem_classes=["logout-btn"]
+                                elem_classes=["logout-btn"],
+                                visible=False
                             )
                             logout_btn.click(
                                 fn=None,
                                 inputs=[],
                                 outputs=[],
                                 js="() => { window.location.href = 'http://127.0.0.1:8000/logout'; }"
-                            )
-
-                            # Theme toggle (compact)
-                            theme_selector = gr.Radio(
-                                choices=[("Dark", "dark"), ("Light", "light")],
-                                value="dark",
-                                label="Theme",
-                                elem_classes=["theme-toggle"]
                             )
 
                             # Mode selector
@@ -1658,21 +1671,6 @@ def run_ui(app):
             submit_btn.click(respond, [msg, chatbot, mode_selector, rag_selector], [msg, chatbot])
             mode_selector.change(update_mode_sections, inputs=mode_selector, outputs=[agents_section, rag_selector])
 
-            # Theme toggle - pure JS, no server round-trip
-            theme_selector.change(
-                fn=None,
-                inputs=[theme_selector],
-                outputs=[],
-                js="""
-                (theme) => {
-                    const c = document.querySelector('.gradio-container');
-                    if (!c) return;
-                    if (theme === 'light') c.classList.add('theme-light');
-                    else c.classList.remove('theme-light');
-                }
-                """
-            )
-
             # ── Auth: read signed token from URL on page load ──
             def on_load(request: gr.Request):
                 from modules.auth_utils import verify_user, get_display, ROLE_PERMISSIONS
@@ -1696,7 +1694,8 @@ def run_ui(app):
                         f'<span class="user-details">'
                         f'<span class="user-name">{display}</span>'
                         f'<span class="user-role" style="color:{role_color}">{role_label}</span>'
-                        f'</span></div>'
+                        f'<a href="http://127.0.0.1:8000/logout" class="signout-link">Sign Out →</a>'
+                        f'</span>{_TB}</div>'
                     )
                 else:
                     show_docs = False
@@ -1706,7 +1705,7 @@ def run_ui(app):
                         '<span class="user-details">'
                         '<span class="user-name">Not logged in</span>'
                         '<a href="http://127.0.0.1:8000/" class="login-link">Sign in →</a>'
-                        '</span></div>'
+                        f'</span>{_TB}</div>'
                     )
 
                 return gr.update(value=info_html), gr.update(visible=show_docs)

@@ -326,8 +326,10 @@ class EnhancedRAGModule(RAGModule):
                 )
 
                 similarity = 1 / (1 + score)
+                doc_name = doc.get('metadata', {}).get('doc_name', '')
+                source_line = f"[Source: {doc_name}]\n" if doc_name else ""
                 compressed_parts.append(
-                    f"[Relevance: {similarity:.2f}]\n{compressed_text}\n"
+                    f"{source_line}[Relevance: {similarity:.2f}]\n{compressed_text}\n"
                 )
 
             return "\n---\n".join(compressed_parts)
@@ -382,7 +384,9 @@ class EnhancedRAGModule(RAGModule):
         context_parts = []
         for doc, score in results:
             similarity = 1 / (1 + score)
-            context_parts.append(f"[Relevance: {similarity:.2f}]\n{doc['text']}\n")
+            doc_name = doc.get('metadata', {}).get('doc_name', '')
+            source_line = f"[Source: {doc_name}]\n" if doc_name else ""
+            context_parts.append(f"{source_line}[Relevance: {similarity:.2f}]\n{doc['text']}\n")
 
         return "\n---\n".join(context_parts)
 

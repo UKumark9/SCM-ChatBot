@@ -386,7 +386,9 @@ class RAGModule:
             context_parts = []
             for doc, score in filtered_results:
                 similarity = 1/(1+score)
-                context_parts.append(f"[Relevance: {similarity:.2f}]\n{doc['text']}\n")
+                doc_name = doc.get('metadata', {}).get('doc_name', '')
+                source_line = f"[Source: {doc_name}]\n" if doc_name else ""
+                context_parts.append(f"{source_line}[Relevance: {similarity:.2f}]\n{doc['text']}\n")
 
             context = "\n---\n".join(context_parts)
             logger.info(f"Retrieved {len(filtered_results)} relevant documents")

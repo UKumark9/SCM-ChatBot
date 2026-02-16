@@ -255,7 +255,7 @@ def build_page(error: str = "", info: str = "") -> str:
   <div class="card">
     <div class="logo">&#128736;</div>
     <h1>SCM Chatbot</h1>
-    <p class="subtitle">Supply Chain Management Dashboard</p>
+    <p class="subtitle">Supply Chain Management</p>
 
     {info_html}
     {error_html}
