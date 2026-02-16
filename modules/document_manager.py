@@ -270,6 +270,129 @@ class DocumentManager:
             logger.error(f"Error vectorizing document {doc_id}: {e}")
             raise
 
+    def rebuild_index_with_progress(self):
+        """Rebuild the entire vector index, yielding progress updates."""
+        import time
+        from concurrent.futures import ThreadPoolExecutor, Future
+
+        if not self.rag_module:
+            yield {'stage': 'error', 'error': 'RAG module not initialized'}
+            return
+
+        all_docs = self.list_documents()
+        if not all_docs:
+            yield {'stage': 'error', 'error': 'No documents found'}
+            return
+
+        total = len(all_docs)
+        yield {'stage': 'start', 'total': total}
+        time.sleep(0.3)
+
+        from rag import DocumentProcessor
+        processor = DocumentProcessor(chunk_size=500, chunk_overlap=100)
+        executor = ThreadPoolExecutor(max_workers=1)
+
+        successful = 0
+        failed = 0
+        all_chunks = []
+
+        def _extract(doc):
+            file_path = self.docs_path / doc['saved_name']
+            if not file_path.exists():
+                return None, 'File not found'
+            if doc['file_type'] == 'pdf':
+                try:
+                    from vectorize_documents import extract_pdf_text
+                    return extract_pdf_text(file_path), None
+                except ImportError:
+                    return self._extract_text(file_path, '.pdf'), None
+            else:
+                return self._extract_text(file_path, f".{doc['file_type']}"), None
+
+        for idx, doc in enumerate(all_docs):
+            doc_name = doc['original_name']
+            yield {'stage': 'extracting', 'current': idx + 1, 'total': total, 'doc_name': doc_name,
+                   'successful': successful, 'failed': failed, 'chunks': len(all_chunks)}
+
+            try:
+                future = executor.submit(_extract, doc)
+                while not future.done():
+                    time.sleep(0.3)
+                text_content, err = future.result()
+
+                if err:
+                    failed += 1
+                    yield {'stage': 'doc_failed', 'current': idx + 1, 'total': total, 'doc_name': doc_name,
+                           'reason': err, 'successful': successful, 'failed': failed, 'chunks': len(all_chunks)}
+                    time.sleep(0.2)
+                    continue
+
+                if not text_content or len(text_content.strip()) < 10:
+                    failed += 1
+                    yield {'stage': 'doc_failed', 'current': idx + 1, 'total': total, 'doc_name': doc_name,
+                           'reason': 'No text extracted', 'successful': successful, 'failed': failed, 'chunks': len(all_chunks)}
+                    time.sleep(0.2)
+                    continue
+
+                yield {'stage': 'chunking', 'current': idx + 1, 'total': total, 'doc_name': doc_name,
+                       'text_length': len(text_content), 'successful': successful, 'failed': failed, 'chunks': len(all_chunks)}
+                time.sleep(0.2)
+
+                chunks = processor.chunk_text(text_content)
+                for chunk_idx, chunk_text in enumerate(chunks):
+                    all_chunks.append({
+                        'id': f"{doc['id']}_chunk_{chunk_idx}",
+                        'text': chunk_text,
+                        'type': 'business_document',
+                        'metadata': {
+                            'doc_id': doc['id'],
+                            'doc_name': doc_name,
+                            'doc_type': doc['doc_type'],
+                            'chunk_index': chunk_idx,
+                            'total_chunks': len(chunks),
+                            'source': 'uploaded_document'
+                        }
+                    })
+
+                for m in self.metadata['documents']:
+                    if m['id'] == doc['id']:
+                        m['vectorized'] = True
+                        m['text_length'] = len(text_content)
+                        break
+                successful += 1
+
+                yield {'stage': 'doc_done', 'current': idx + 1, 'total': total, 'doc_name': doc_name,
+                       'doc_chunks': len(chunks), 'successful': successful, 'failed': failed, 'chunks': len(all_chunks)}
+                time.sleep(0.2)
+
+            except Exception as e:
+                logger.error(f"Error processing {doc_name}: {e}")
+                failed += 1
+                yield {'stage': 'doc_failed', 'current': idx + 1, 'total': total, 'doc_name': doc_name,
+                       'reason': str(e), 'successful': successful, 'failed': failed, 'chunks': len(all_chunks)}
+                time.sleep(0.2)
+
+        executor.shutdown(wait=False)
+
+        if not all_chunks:
+            yield {'stage': 'error', 'error': 'No text could be extracted from any document'}
+            return
+
+        yield {'stage': 'building', 'successful': successful, 'failed': failed, 'chunks': len(all_chunks)}
+        time.sleep(0.2)
+
+        try:
+            self.rag_module.vector_db.build_index(all_chunks)
+            yield {'stage': 'saving', 'successful': successful, 'failed': failed, 'chunks': len(all_chunks)}
+            time.sleep(0.2)
+            self.rag_module.vector_db.save_index("data/vector_index")
+            self._save_metadata()
+            logger.info(f"Index rebuilt: {successful} docs, {len(all_chunks)} chunks")
+            yield {'stage': 'done', 'total': total, 'successful': successful, 'failed': failed, 'chunks': len(all_chunks)}
+        except Exception as e:
+            logger.error(f"Error building index: {e}")
+            yield {'stage': 'error', 'error': str(e)}
+
     def list_documents(self, doc_type: Optional[str] = None) -> List[Dict]:
         """
         List all uploaded documents

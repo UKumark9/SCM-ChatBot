@@ -301,8 +301,7 @@ Extract only the relevant information from tool results to answer the specific q
                 # NEW: If classification says this is a POLICY ONLY question
                 if classification and classification.get('query_type') == 'policy':
                     if used_rag and rag_context and len(rag_context.strip()) > 20:
-                        # Return RAG context only for policy questions
-                        response = UIFormatter.format_rag_context(rag_context)
+                        response = UIFormatter.synthesize_rag_response(user_query, rag_context, self.llm_client)
 
                         return {
                             'response': response,
@@ -312,7 +311,6 @@ Extract only the relevant information from tool results to answer the specific q
                             'classification': classification
                         }
                     else:
-                        # No RAG context found for policy question
                         return {
                             'response': "No policy documents found for this query. Please rephrase or ask a data question.",
                             'agent': 'Delay Agent (Rule-Based)',

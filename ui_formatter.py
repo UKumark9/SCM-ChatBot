@@ -180,6 +180,35 @@ class UIFormatter:
         return " | ".join(parts)
 
     @staticmethod
+    def synthesize_rag_response(query: str, context: str, llm_client=None) -> str:
+        """Use LLM to synthesize a coherent answer from RAG context.
+        Falls back to formatted raw chunks if LLM is unavailable."""
+        if not context or context == "No relevant context found.":
+            return "*No relevant policy documents found.*"
+
+        if not llm_client:
+            return UIFormatter.format_rag_context(context)
+
+        try:
+            from langchain_core.messages import HumanMessage, SystemMessage
+            messages = [
+                SystemMessage(content=(
+                    "You are a supply chain management expert. Using ONLY the provided document excerpts, "
+                    "give a clear, concise answer to the user's question. "
+                    "Use bullet points and bold key terms for readability. "
+                    "If the documents don't fully answer the question, say what you found and note the gap. "
+                    "Do NOT mention document numbers or relevance scores."
+                )),
+                HumanMessage(content=f"Documents:\n{context}\n\nQuestion: {query}")
+            ]
+            response = llm_client.invoke(messages)
+            return response.content
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"LLM synthesis failed, using raw context: {e}")
+            return UIFormatter.format_rag_context(context)
+
+    @staticmethod
     def format_rag_context(context: str) -> str:
         if not context or context == "No relevant context found.":
             return "*No relevant policy documents found.*"

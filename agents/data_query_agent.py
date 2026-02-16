@@ -1255,8 +1255,7 @@ Always choose the most specific tool for the user's query."""),
                 # But respect classification if provided
                 if classification and classification.get('query_type') == 'policy':
                     if used_rag and rag_context and len(rag_context.strip()) > 20:
-                        # Return RAG context only for policy questions
-                        response = UIFormatter.format_rag_context(rag_context)
+                        response = UIFormatter.synthesize_rag_response(user_query, rag_context, self.llm_client)
 
                         return {
                             'response': response,

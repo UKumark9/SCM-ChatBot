@@ -610,16 +610,40 @@ What would you like to know?"""
                     return response_text + agent_info
 
             # Fallback to rule-based response
-            rule_response = self.generate_rule_based_response(user_query, intent, analytics_data)
-            response_text = rule_response
+            # If RAG context is available, synthesize it via LLM for conceptual questions
+            rag_used_fallback = False
+            if context and len(context.strip()) > 20 and 'no relevant' not in context.lower() and self.llm_client:
+                try:
+                    synth = self.llm_client.chat.completions.create(
+                        model="llama-3.3-70b-versatile",
+                        messages=[
+                            {"role": "system", "content": (
+                                "You are a supply chain management expert. Using ONLY the provided document excerpts, "
+                                "give a clear, concise answer to the user's question. "
+                                "Use bullet points and bold key terms for readability. "
+                                "If the documents don't fully answer the question, say what you found and note the gap. "
+                                "Do NOT mention document numbers or relevance scores."
+                            )},
+                            {"role": "user", "content": f"Documents:\n{context}\n\nQuestion: {user_query}"}
+                        ],
+                        temperature=0.3,
+                        max_tokens=1024
+                    )
+                    response_text = synth.choices[0].message.content
+                    rag_used_fallback = True
+                except Exception as e:
+                    logger.warning(f"RAG synthesis failed in rule-based fallback: {e}")
+                    response_text = self.generate_rule_based_response(user_query, intent, analytics_data)
+            else:
+                response_text = self.generate_rule_based_response(user_query, intent, analytics_data)
 
             # Build agent info
             if show_agent:
                 agent_info = self._build_agent_info(
-                    agent="Rule-Based Engine",
+                    agent="Rule-Based Engine" + (" + RAG" if rag_used_fallback else ""),
                     model="Pattern Matching",
                     complexity=intent.get('complexity', 'moderate'),
-                    rag_used=False
+                    rag_used=rag_used_fallback
                 )
 
             # Add to conversation history

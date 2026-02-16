@@ -1155,6 +1155,78 @@ def run_ui(app):
                 import traceback
                 return f"Error: {str(e)}\n\n{traceback.format_exc()}", gr.update(), gr.update()
 
+        # Rebuild index handler (generator for live progress)
+        def rebuild_index():
+            import time
+
+            if not app.document_manager:
+                yield "Document Manager not initialized"
+                return
+            if not app.document_manager.rag_module:
+                yield "RAG module not available — index rebuild requires RAG initialization"
+                return
+            try:
+                for progress in app.document_manager.rebuild_index_with_progress():
+                    stage = progress.get('stage', '')
+                    total = progress.get('total', 0)
+                    current = progress.get('current', 0)
+                    successful = progress.get('successful', 0)
+                    failed = progress.get('failed', 0)
+                    chunks = progress.get('chunks', 0)
+                    doc_name = progress.get('doc_name', '')
+
+                    if stage == 'error':
+                        yield f"**Rebuild failed:** {progress.get('error', 'Unknown error')}"
+                        return
+
+                    bar_len = 20
+                    filled = int(bar_len * current / total) if total else 0
+                    bar = "█" * filled + "░" * (bar_len - filled)
+                    pct = int(100 * current / total) if total else 0
+                    header = f"**Rebuilding Index** `[{bar}]` {pct}% ({current}/{total})\n\n"
+                    stats = f"> Processed: **{successful}** | Failed: **{failed}** | Chunks: **{chunks}**\n\n"
+
+                    if stage == 'start':
+                        yield f"**Rebuilding Index** — found **{total}** document(s)...\n\n> Starting..."
+                        time.sleep(0.2)
+
+                    elif stage == 'extracting':
+                        yield header + stats + f"Extracting text from `{doc_name}`..."
+                        time.sleep(0.1)
+
+                    elif stage == 'chunking':
+                        text_len = progress.get('text_length', 0)
+                        yield header + stats + f"Chunking `{doc_name}` ({text_len:,} chars)..."
+                        time.sleep(0.1)
+
+                    elif stage == 'doc_done':
+                        doc_chunks = progress.get('doc_chunks', 0)
+                        yield header + stats + f"`{doc_name}` — **{doc_chunks} chunks** created"
+                        time.sleep(0.1)
+
+                    elif stage == 'doc_failed':
+                        reason = progress.get('reason', 'Unknown')
+                        yield header + stats + f"`{doc_name}` — **failed** ({reason})"
+                        time.sleep(0.1)
+
+                    elif stage == 'building':
+                        bar_full = "█" * bar_len
+                        yield f"**Rebuilding Index** `[{bar_full}]` 100%\n\n{stats}Building FAISS + BM25 index..."
+                        time.sleep(0.1)
+
+                    elif stage == 'saving':
+                        bar_full = "█" * bar_len
+                        yield f"**Rebuilding Index** `[{bar_full}]` 100%\n\n{stats}Saving index to disk..."
+                        time.sleep(0.1)
+
+                    elif stage == 'done':
+                        yield (f"**Index rebuilt successfully!**\n\n"
+                               f"**Documents processed:** {successful}/{total}\n"
+                               f"**Chunks indexed:** {chunks}\n"
+                               f"**Failed:** {failed}")
+            except Exception as e:
+                yield f"Error: {str(e)}"
+
         # Feature store stats handler
         def show_feature_stats():
             if not app.feature_store:
@@ -1426,10 +1498,15 @@ def run_ui(app):
                             delete_btn = gr.Button("Delete Selected", variant="stop")
                             delete_output = gr.Markdown()
 
+                            gr.HTML('<div class="heading-text" style="margin-top:16px;">Index Management</div>')
+                            rebuild_btn = gr.Button("Rebuild Index", variant="secondary")
+                            rebuild_output = gr.Markdown()
+
                     # Event handlers for documents
                     upload_btn.click(upload_document, inputs=[doc_file, doc_type_input, doc_description], outputs=upload_output)
                     list_btn.click(list_documents, inputs=doc_filter, outputs=[doc_list_output, doc_selector])
                     delete_btn.click(delete_document, inputs=[doc_selector, doc_filter], outputs=[delete_output, doc_list_output, doc_selector])
+                    rebuild_btn.click(rebuild_index, inputs=[], outputs=rebuild_output)
 
                 # ══════ STATISTICS TAB ══════
                 with gr.Tab("Statistics", id="stats"):

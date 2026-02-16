@@ -63,8 +63,8 @@ class EnhancedVectorDatabase(VectorDatabase):
             logger.warning("BM25 index not built, falling back to vector search")
             return self.search(query, top_k)
 
-        # 1. Vector search scores
-        vector_results = self.search(query, top_k=top_k * 2)
+        # 1. Vector search scores (wider pool to give BM25 more candidates to boost)
+        vector_results = self.search(query, top_k=top_k * 4)
         vector_scores = {}
         for doc, distance in vector_results:
             doc_id = doc['id']
@@ -182,7 +182,7 @@ class EnhancedRAGModule(RAGModule):
             self.reranker = None
 
     def retrieve_context(self, query: str, use_query_expansion: bool = True,
-                        use_hybrid: bool = True, alpha: float = 0.8) -> str:
+                        use_hybrid: bool = True, alpha: float = 0.5) -> str:
         """
         Enhanced context retrieval with re-ranking and compression
 
