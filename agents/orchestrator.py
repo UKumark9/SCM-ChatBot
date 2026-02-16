@@ -472,12 +472,12 @@ class AgentOrchestrator:
             # Combine results in execution order (maintains logical flow)
             combined_response_parts = []
 
-            # Section headers based on agent type
+            # Section headers based on agent type — use markdown ## so Gradio renders them
             section_headers = {
-                'delay': '📊 DELIVERY PERFORMANCE',
-                'analytics': '💰 REVENUE & ANALYTICS',
-                'forecasting': '📈 DEMAND FORECAST',
-                'data_query': '📋 DATA QUERY RESULTS'
+                'delay':      '## Delivery Performance',
+                'analytics':  '## Revenue & Analytics',
+                'forecasting':'## Demand Forecast',
+                'data_query': '## Data Query Results'
             }
 
             # Track which agents used RAG
@@ -486,34 +486,30 @@ class AgentOrchestrator:
             # Add results in execution order
             for agent_name in agents_used:
                 if agent_name in results and results[agent_name].get('success', True):
-                    combined_response_parts.append(f"{section_headers.get(agent_name, agent_name.upper())}\n{results[agent_name].get('response', 'No response')}")
+                    header = section_headers.get(agent_name, f"## {agent_name.upper()}")
+                    body   = results[agent_name].get('response', 'No response').strip()
+                    combined_response_parts.append(f"{header}\n\n{body}")
 
                     # Track RAG usage
                     if results[agent_name].get('used_rag', False):
                         agents_with_rag.append(agent_name)
 
-            # Build final response
-            combined_response = "\n\n".join(combined_response_parts)
+            # Build final response with markdown horizontal rules between sections
+            combined_response = "\n\n---\n\n".join(combined_response_parts)
 
             # Generate cross-agent insights if multiple domains analyzed
             if len(agents_used) >= 2:
                 cross_insights = self._generate_cross_agent_insights(context_data, agents_used)
                 if cross_insights:
-                    combined_response += "\n\n" + "═"*60 + "\n"
-                    combined_response += "💡 **CROSS-DOMAIN INSIGHTS**\n"
-                    combined_response += "═"*60 + "\n"
+                    combined_response += "\n\n---\n\n## Cross-Domain Insights\n\n"
                     combined_response += cross_insights
 
             # Add clean agent execution summary at the end
-            agent_summary = "\n\n" + "─"*60 + "\n"
-            agent_summary += f"🤖 **Agents:** {', '.join([a.capitalize() for a in agents_used])}"
-            agent_summary += f" | 📊 **Order:** {' → '.join([a.capitalize() for a in execution_order if a in agents_used])}"
+            agent_summary_parts = [f"**Agents:** {', '.join([a.capitalize() for a in agents_used])}"]
+            agent_summary_parts.append(f"**Order:** {' → '.join([a.capitalize() for a in execution_order if a in agents_used])}")
             if agents_with_rag:
-                agent_summary += f" | 📚 **RAG:** {', '.join([a.capitalize() for a in agents_with_rag])}"
-            # Metrics will be appended here by the query method
-            agent_summary += "\n" + "─"*60
-
-            combined_response += agent_summary
+                agent_summary_parts.append(f"**RAG:** {', '.join([a.capitalize() for a in agents_with_rag])}")
+            combined_response += "\n\n---\n\n" + " | ".join(agent_summary_parts)
 
             return {
                 'response': combined_response,
@@ -596,18 +592,18 @@ class AgentOrchestrator:
                 if delay_rate and forecast_trend:
                     if delay_rate > 10 and forecast_trend == 'increasing':
                         insights.append(
-                            "⚠️ **Supply Chain Risk**: High delay rate combined with increasing demand "
+                            "**Supply Chain Risk**: High delay rate combined with increasing demand "
                             "may lead to customer dissatisfaction. Consider increasing safety stock or "
                             "improving supplier performance."
                         )
                     elif delay_rate < 5 and forecast_trend == 'increasing':
                         insights.append(
-                            "✅ **Growth Opportunity**: Excellent delivery performance with growing demand. "
+                            "**Growth Opportunity**: Excellent delivery performance with growing demand. "
                             "Good position to capture market share. Monitor capacity for sustained performance."
                         )
                     elif delay_rate > 10 and forecast_trend == 'decreasing':
                         insights.append(
-                            "📉 **Performance Issue**: High delays with declining demand may indicate "
+                            "**Performance Issue**: High delays with declining demand may indicate "
                             "operational inefficiencies. Focus on process improvement to retain customers."
                         )
 
@@ -616,7 +612,7 @@ class AgentOrchestrator:
                 delay_rate = context_data.get('delay_rate')
                 if delay_rate and delay_rate > 8:
                     insights.append(
-                        "💰 **Revenue Impact**: Current delay rate may be affecting customer satisfaction "
+                        "**Revenue Impact**: Current delay rate may be affecting customer satisfaction "
                         "and repeat purchase rates. Improving delivery performance could boost revenue."
                     )
 
@@ -625,19 +621,19 @@ class AgentOrchestrator:
                 forecast_trend = context_data.get('forecast_trend')
                 if forecast_trend == 'increasing':
                     insights.append(
-                        "📈 **Inventory Planning**: Growing demand forecast suggests reviewing inventory "
+                        "**Inventory Planning**: Growing demand forecast suggests reviewing inventory "
                         "levels and procurement schedules to avoid stockouts."
                     )
                 elif forecast_trend == 'decreasing':
                     insights.append(
-                        "📊 **Demand Planning**: Declining demand forecast indicates need to adjust "
+                        "**Demand Planning**: Declining demand forecast indicates need to adjust "
                         "inventory levels to avoid excess stock and optimize working capital."
                     )
 
             # Triple agent insight (Delay + Analytics + Forecasting)
             if len(agents_used) >= 3 and 'delay' in agents_used and 'forecasting' in agents_used:
                 insights.append(
-                    "🔄 **Holistic View**: Analysis spans delivery performance, financial metrics, and "
+                    "**Holistic View**: Analysis spans delivery performance, financial metrics, and "
                     "demand forecasting. Use these combined insights for strategic planning and "
                     "operational optimization."
                 )
@@ -662,16 +658,23 @@ class AgentOrchestrator:
             forecast_result = self.forecasting_agent.query("Forecast demand for 30 days")
 
             # Combine results
-            comprehensive_response = f"""🔍 Comprehensive Supply Chain Analysis
+            comprehensive_response = f"""# Comprehensive Supply Chain Analysis
 
-📊 DELIVERY PERFORMANCE
-{delay_result.get('response', 'N/A')}
+## Delivery Performance
 
-💰 REVENUE & ANALYTICS
-{analytics_result.get('response', 'N/A')}
+{delay_result.get('response', 'N/A').strip()}
 
-📈 DEMAND FORECAST
-{forecast_result.get('response', 'N/A')}
+---
+
+## Revenue & Analytics
+
+{analytics_result.get('response', 'N/A').strip()}
+
+---
+
+## Demand Forecast
+
+{forecast_result.get('response', 'N/A').strip()}
 """
 
             return {

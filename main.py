@@ -1,5 +1,5 @@
 """
-Main Application File - FIXED for Python 3.14
+Main Application File - Python 3.14
 """
 
 import sys

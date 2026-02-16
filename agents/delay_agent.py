@@ -222,7 +222,7 @@ Extract only the relevant information from tool results to answer the specific q
             # Format response
             response = f"""Product-Level Delay Analysis ({result['filter']}):
 
-📊 **Overall Statistics:**
+**Overall Statistics:**
 - Total Orders: {result['total_orders']:,}
 - Delayed Orders: {result['delayed_orders']:,}
 - Delay Rate: {result['delay_rate_percentage']:.2f}%
@@ -238,7 +238,7 @@ Extract only the relevant information from tool results to answer the specific q
 
             # Add top delayed categories if available
             if 'top_delayed_categories' in result:
-                response += "\n\n📦 **Top 5 Delayed Categories:**\n"
+                response += "\n\n**Top 5 Delayed Categories:**\n"
                 for i, cat in enumerate(result['top_delayed_categories'][:5], 1):
                     response += f"{i}. {cat['category']}: {cat['delay_rate']*100:.1f}% delay rate ({cat['delayed_count']}/{cat['total_count']} orders)\n"
 
@@ -355,7 +355,7 @@ Extract only the relevant information from tool results to answer the specific q
 - Delay Rate: {result['delay_rate_percentage']:.2f}%
 - On-Time Rate: {100 - result['delay_rate_percentage']:.2f}%
 
-💡 *Ask for "delay statistics" for more details*"""
+*Ask for "delay statistics" for more details*"""
 
                 # Append RAG context only if classification allows it (mixed queries)
                 if used_rag and should_use_rag and rag_context and len(rag_context.strip()) > 20 and "no relevant" not in rag_context.lower():

@@ -566,6 +566,18 @@ What would you like to know?"""
         Returns:
             Response string
         """
+        # Track metrics for enhanced mode
+        import time as _time
+        _metrics_tracker = None
+        _query_id = None
+        try:
+            from metrics_tracker import get_metrics_tracker
+            _metrics_tracker = get_metrics_tracker()
+            _query_id = _metrics_tracker.start_query(user_query, mode='enhanced')
+            _metrics_tracker.add_data_source(_query_id, 'analytics_engine')
+        except Exception:
+            pass
+
         try:
             logger.info(f"Processing query: {user_query} (use_rag={use_rag})")
 
@@ -606,6 +618,14 @@ What would you like to know?"""
                         'intent': intent,
                         'agent': 'llm'
                     })
+
+                    if _metrics_tracker and _query_id:
+                        rag_actually_used = bool(context and self.rag and use_rag)
+                        if rag_actually_used:
+                            _metrics_tracker.add_data_source(_query_id, 'rag_documents')
+                        _metrics_tracker.add_agent_execution(_query_id, 'enhanced', used_rag=rag_actually_used)
+                        _metrics_tracker.calculate_hallucination_score(_query_id, response_text, ground_truth_data={'analytics': True})
+                        _metrics_tracker.end_query(_query_id, success=True)
 
                     return response_text + agent_info
 
@@ -654,12 +674,22 @@ What would you like to know?"""
                 'agent': 'rule-based'
             })
 
+            if _metrics_tracker and _query_id:
+                rag_actually_used = bool(context and self.rag and use_rag)
+                if rag_actually_used:
+                    _metrics_tracker.add_data_source(_query_id, 'rag_documents')
+                _metrics_tracker.add_agent_execution(_query_id, 'enhanced', used_rag=rag_actually_used)
+                _metrics_tracker.calculate_hallucination_score(_query_id, response_text, ground_truth_data={'analytics': True})
+                _metrics_tracker.end_query(_query_id, success=True)
+
             return response_text + agent_info
 
         except Exception as e:
             logger.error(f"Error processing query: {e}")
             import traceback
             traceback.print_exc()
+            if _metrics_tracker and _query_id:
+                _metrics_tracker.end_query(_query_id, success=False, error=str(e))
             return f"❌ Error processing your query: {str(e)}\n\nPlease try rephrasing your question."
 
     def _build_agent_info(self, agent: str, model: str, complexity: str, rag_used: bool) -> str:

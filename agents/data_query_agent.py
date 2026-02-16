@@ -399,9 +399,9 @@ class DataQueryAgent:
             if 'delay_days' in order_row and pd.notna(order_row['delay_days']):
                 delay_days = int(order_row['delay_days'])
                 if delay_days > 0:
-                    response += f"- **Status**: ⚠️ **Delayed** by {delay_days} days\n"
+                    response += f"- **Status**: **Delayed** by {delay_days} days\n"
                 else:
-                    response += f"- **Status**: ✅ **On-time** (delivered {abs(delay_days)} days early)\n"
+                    response += f"- **Status**: **On-time** (delivered {abs(delay_days)} days early)\n"
             else:
                 response += f"- **Status**: Pending or unknown\n"
 
@@ -782,11 +782,11 @@ class DataQueryAgent:
 
             if on_time_count > 0:
                 pct = (on_time_count / total) * 100
-                response += f"| ✅ On-Time | {on_time_count:,} | {pct:.1f}% |\n"
+                response += f"| On-Time | {on_time_count:,} | {pct:.1f}% |\n"
 
             if delayed_count > 0:
                 pct = (delayed_count / total) * 100
-                response += f"| ⚠️ Delayed | {delayed_count:,} | {pct:.1f}% |\n"
+                response += f"| Delayed | {delayed_count:,} | {pct:.1f}% |\n"
 
             if pending_count > 0:
                 pct = (pending_count / total) * 100
@@ -913,11 +913,11 @@ class DataQueryAgent:
                     date = str(date)[:10]
 
                 if 'is_delayed' in order and order['is_delayed']:
-                    status = "⚠️ Delayed"
+                    status = "Delayed"
                 elif 'is_on_time' in order and order['is_on_time']:
-                    status = "✅ On-time"
+                    status = "On-time"
                 else:
-                    status = "⏳ Pending"
+                    status = "Pending"
 
                 payment = payment_by_order.get(order_id, 0)
                 payment_str = f"R$ {payment:,.2f}" if payment > 0 else "N/A"

@@ -93,14 +93,32 @@ class UIFormatter:
         return "\n".join(output)
 
     @staticmethod
+    def _is_table_line(line: str) -> bool:
+        """Return True for markdown table rows and separator lines — must not be mutated."""
+        stripped = line.strip()
+        return stripped.startswith('|') or bool(re.match(r'^\|?[\s\-:]+\|', stripped))
+
+    @staticmethod
     def _format_content(text: str) -> str:
         if not text:
             return "*No response generated.*"
 
+        # Collapse excessive blank lines globally (safe on tables)
         text = re.sub(r'\n{3,}', '\n\n', text)
-        text = re.sub(r'([^\n])(\s*[•\-\*]\s)', r'\1\n\2', text)
-        text = re.sub(r'([^\n])(\s*\d+\.\s)', r'\1\n\2', text)
-        text = re.sub(r':([A-Z])', r':\n\1', text)
+
+        # Apply inline fixups only to non-table lines to avoid corrupting cell content
+        lines = text.split('\n')
+        processed = []
+        for line in lines:
+            if UIFormatter._is_table_line(line):
+                processed.append(line)
+            else:
+                line = re.sub(r'([^\n])(\s*[•]\s)', r'\1\n\2', line)       # bullet points
+                line = re.sub(r'([^\n])(\s*-\s)(?!\s*\|)', r'\1\n\2', line) # dashes (not table)
+                line = re.sub(r'([^\n])(\s*\d+\.\s)', r'\1\n\2', line)     # numbered lists
+                line = re.sub(r':([A-Z])(?![^|]*\|)', r':\n\1', line)      # colon+Upper (not inside table)
+                processed.append(line)
+        text = '\n'.join(processed)
 
         if "Based on policy documents:" in text:
             text = text.replace("Based on policy documents:", "\n### Policy Documents\n")
@@ -118,7 +136,10 @@ class UIFormatter:
         formatted_lines = []
 
         for line in lines:
-            if line.strip().endswith(':') and len(line.strip()) > 5 and not line.strip().startswith('['):
+            # Skip table rows — never convert them to section headers
+            if UIFormatter._is_table_line(line):
+                formatted_lines.append(line)
+            elif line.strip().endswith(':') and len(line.strip()) > 5 and not line.strip().startswith('['):
                 formatted_lines.append(f"\n### {line.strip()}\n")
             else:
                 formatted_lines.append(line)

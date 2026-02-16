@@ -214,7 +214,7 @@ No queries recorded yet. Run some queries to see performance metrics.
         # Separate by mode if available
         agentic_queries = [m for m in recent if 'agentic' in m.get('mode', '').lower() or
                           any('Agent' in agent for agent in m.get('agents_executed', []))]
-        enhanced_queries = [m for m in recent if 'enhanced' in m.get('mode', '').lower() and not agentic_queries]
+        enhanced_queries = [m for m in recent if 'enhanced' in m.get('mode', '').lower() and m not in agentic_queries]
 
         # Calculate overall stats
         total_queries = len(recent)
