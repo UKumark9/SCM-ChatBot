@@ -1054,6 +1054,29 @@ def run_ui(app):
         .theme-toggle { margin-bottom: 8px; }
         .theme-toggle .gr-radio-row { gap: 6px !important; }
         .theme-toggle label span { font-size: 0.85rem !important; }
+
+        /* ═══ USER INFO BAR ═══ */
+        .user-info-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            padding: 10px 14px;
+            margin-bottom: 6px;
+        }
+        .user-info-warn { border-color: rgba(234,179,8,0.35); background: rgba(234,179,8,0.06); }
+        .user-avatar { font-size: 1.3rem; line-height: 1; }
+        .user-details { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .user-name { color: #f1f5f9; font-size: 0.875rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .user-role { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+        .login-link { color: #818cf8; font-size: 0.8rem; text-decoration: none; }
+        .login-link:hover { text-decoration: underline; }
+
+        /* ═══ LOGOUT BUTTON ═══ */
+        .logout-btn { margin-bottom: 12px !important; width: 100% !important; }
+        .logout-btn button { font-size: 0.82rem !important; padding: 7px 12px !important; }
         """
 
         def chat_with_mode(message, history, mode, rag_config="with_rag"):
@@ -1355,6 +1378,25 @@ def run_ui(app):
 
                         # Sidebar
                         with gr.Column(scale=1, min_width=280):
+                            # ── User info + logout ──
+                            user_info = gr.HTML(
+                                value='<div class="user-info-bar"><span class="user-avatar">👤</span>'
+                                      '<span class="user-details"><span class="user-name">Loading…</span>'
+                                      '<span class="user-role"></span></span></div>'
+                            )
+                            logout_btn = gr.Button(
+                                "⏻  Logout",
+                                variant="secondary",
+                                size="sm",
+                                elem_classes=["logout-btn"]
+                            )
+                            logout_btn.click(
+                                fn=None,
+                                inputs=[],
+                                outputs=[],
+                                js="() => { window.location.href = 'http://127.0.0.1:8000/logout'; }"
+                            )
+
                             # Theme toggle (compact)
                             theme_selector = gr.Radio(
                                 choices=[("Dark", "dark"), ("Light", "light")],
@@ -1447,7 +1489,7 @@ def run_ui(app):
                                 )
 
                 # ══════ DOCUMENTS TAB ══════
-                with gr.Tab("Documents", id="docs"):
+                with gr.Tab("Documents", id="docs", visible=False) as docs_tab:
                     gr.HTML("""
                     <div class="section-header">
                         <div class="section-icon"><svg viewBox="0 0 24 24"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/><path d="M8 7h6"/><path d="M8 11h8"/></svg></div>
@@ -1630,6 +1672,46 @@ def run_ui(app):
                 }
                 """
             )
+
+            # ── Auth: read signed token from URL on page load ──
+            def on_load(request: gr.Request):
+                from modules.auth_utils import verify_user, get_display, ROLE_PERMISSIONS
+                try:
+                    params = dict(request.query_params)
+                except Exception:
+                    params = {}
+                user = params.get("user", "")
+                role = params.get("role", "")
+                sig  = params.get("sig", "")
+
+                if verify_user(user, role, sig):
+                    display   = get_display(user)
+                    perms     = ROLE_PERMISSIONS.get(role, ROLE_PERMISSIONS["analyst"])
+                    show_docs = perms["docs_tab_visible"]
+                    role_label = role.upper()
+                    role_color = "#a5b4fc" if role == "admin" else "#6ee7b7"
+                    info_html = (
+                        f'<div class="user-info-bar">'
+                        f'<span class="user-avatar">👤</span>'
+                        f'<span class="user-details">'
+                        f'<span class="user-name">{display}</span>'
+                        f'<span class="user-role" style="color:{role_color}">{role_label}</span>'
+                        f'</span></div>'
+                    )
+                else:
+                    show_docs = False
+                    info_html = (
+                        '<div class="user-info-bar user-info-warn">'
+                        '<span class="user-avatar">⚠️</span>'
+                        '<span class="user-details">'
+                        '<span class="user-name">Not logged in</span>'
+                        '<a href="http://127.0.0.1:8000/" class="login-link">Sign in →</a>'
+                        '</span></div>'
+                    )
+
+                return gr.update(value=info_html), gr.update(visible=show_docs)
+
+            demo.load(on_load, inputs=None, outputs=[user_info, docs_tab])
 
         print("\n" + "="*70)
         print(f"  SCM Intelligent Chatbot ({mode_info}{rag_info})")
