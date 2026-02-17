@@ -1050,6 +1050,10 @@ Your expertise includes:
 - Tracking order status and delivery performance
 - Analyzing customer purchase history and trends
 
+IMPORTANT - POLICY VS DATA QUESTIONS:
+If the user's query is asking about CONCEPTUAL/THEORETICAL topics (e.g., "approaches to warehousing", "modes of transport", "supply chain strategies"), and relevant context is provided at the beginning of the query, USE THAT CONTEXT to answer.
+DO NOT try to answer conceptual questions using database tools. Database tools only contain transactional data (orders, customers, products), NOT policy documents or theoretical information.
+
 TOOL SELECTION GUIDELINES:
 
 **Direct Lookups**:
@@ -1264,6 +1268,17 @@ Always choose the most specific tool for the user's query."""),
                             'agent': 'Data Query Agent (Rule-Based) + RAG',
                             'success': True,
                             'used_rag': True,
+                            'classification': classification
+                        }
+                    else:
+                        # RAG failed or no sufficient context - don't fall through to database queries
+                        return {
+                            'response': "This appears to be a conceptual/policy question, but I couldn't find relevant information in the uploaded documents. Please ensure you've uploaded the necessary policy documents, or try rephrasing your question.",
+                            'chart_base64': None,
+                            'charts_base64': None,
+                            'agent': 'Data Query Agent (Rule-Based)',
+                            'success': False,
+                            'used_rag': False,
                             'classification': classification
                         }
 
