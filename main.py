@@ -400,7 +400,8 @@ class SCMChatbotApp:
                 analytics_engine=self.analytics,
                 data_wrapper=data_wrapper,
                 rag_module=self.rag_module,
-                use_langchain=True
+                use_langchain=True,
+                feature_store=self.feature_store
             )
 
             logger.info("✅ Agent Orchestrator initialized")

@@ -1256,6 +1256,16 @@ def run_ui(app):
             except Exception as e:
                 yield f"Error: {str(e)}"
 
+        # Clear feature cache handler
+        def clear_feature_cache():
+            if not app.feature_store:
+                return "Feature Store not initialized"
+            try:
+                count = app.feature_store.clear_all()
+                return f"**Cache cleared!** Removed {count} cached entries.\n\nRefresh statistics to see updated counts."
+            except Exception as e:
+                return f"Error clearing cache: {str(e)}"
+
         # Feature store stats handler
         def show_feature_stats():
             if not app.feature_store:
@@ -1574,8 +1584,11 @@ def run_ui(app):
                     """)
 
                     stats_output = gr.Markdown()
-                    refresh_stats_btn = gr.Button("Refresh Statistics", variant="primary")
+                    with gr.Row():
+                        refresh_stats_btn = gr.Button("Refresh Statistics", variant="primary")
+                        clear_cache_btn = gr.Button("Clear Cache", variant="secondary")
                     refresh_stats_btn.click(show_feature_stats, inputs=None, outputs=stats_output)
+                    clear_cache_btn.click(clear_feature_cache, inputs=None, outputs=stats_output)
 
                 # ══════ PERFORMANCE TAB ══════
                 with gr.Tab("Performance", id="perf"):

@@ -57,11 +57,13 @@ class ForecastingEngine:
     CHART_FORECAST = '#10b981'
 
     def __init__(self, orders_df: pd.DataFrame, order_items_df: pd.DataFrame,
-                 payments_df: pd.DataFrame = None, products_df: pd.DataFrame = None):
+                 payments_df: pd.DataFrame = None, products_df: pd.DataFrame = None,
+                 feature_store=None):
         self.orders      = orders_df
         self.order_items = order_items_df
         self.payments    = payments_df
         self.products    = products_df
+        self.feature_store = feature_store
         self._demand_cache: Dict[str, pd.Series] = {}
 
     # ── Data preparation ─────────────────────────────────────────────────────
@@ -511,6 +513,14 @@ class ForecastingEngine:
         if not STATSMODELS_AVAILABLE:
             return {'error': 'statsmodels not installed. Run: pip install statsmodels'}
 
+        # Check cache
+        cache_key = f"sarima_{periods}"
+        if self.feature_store:
+            cached = self.feature_store.get('forecast', cache_key)
+            if cached:
+                logger.info(f"Cache hit: forecast/{cache_key}")
+                return cached
+
         demand = self._prepare_demand_series(history_months=12)
 
         result = self._run_sarima_on_series(
@@ -550,7 +560,7 @@ class ForecastingEngine:
 
         charts = [result['chart_base64'], result['bar_chart_base64']]
 
-        return {
+        output = {
             'summary_text':  summary,
             'chart_base64':  result['chart_base64'],
             'charts_base64': charts,
@@ -560,6 +570,12 @@ class ForecastingEngine:
             'trend': result['trend'],
         }
 
+        if self.feature_store:
+            self.feature_store.set('forecast', cache_key, output, ttl=3600)
+            logger.info(f"Cached: forecast/{cache_key} (TTL=1h)")
+
+        return output
+
     def forecast_revenue(self, periods: int = 30) -> Dict[str, Any]:
         """
         SARIMA weekly revenue (payment_value) forecast.
@@ -568,6 +584,13 @@ class ForecastingEngine:
         """
         if not STATSMODELS_AVAILABLE:
             return {'error': 'statsmodels not installed. Run: pip install statsmodels'}
+
+        cache_key = f"revenue_{periods}"
+        if self.feature_store:
+            cached = self.feature_store.get('forecast', cache_key)
+            if cached:
+                logger.info(f"Cache hit: forecast/{cache_key}")
+                return cached
 
         try:
             revenue = self._prepare_revenue_series(history_months=12)
@@ -608,7 +631,7 @@ class ForecastingEngine:
 
         charts = [result['chart_base64'], result['bar_chart_base64']]
 
-        return {
+        output = {
             'summary_text':  summary,
             'chart_base64':  result['chart_base64'],
             'charts_base64': charts,
@@ -617,6 +640,12 @@ class ForecastingEngine:
             'method': 'SARIMA',
             'trend': result['trend'],
         }
+
+        if self.feature_store:
+            self.feature_store.set('forecast', cache_key, output, ttl=3600)
+            logger.info(f"Cached: forecast/{cache_key} (TTL=1h)")
+
+        return output
 
     def forecast_delay_rate(self, periods: int = 30) -> Dict[str, Any]:
         """
@@ -627,6 +656,13 @@ class ForecastingEngine:
         """
         if not STATSMODELS_AVAILABLE:
             return {'error': 'statsmodels not installed. Run: pip install statsmodels'}
+
+        cache_key = f"delay_rate_{periods}"
+        if self.feature_store:
+            cached = self.feature_store.get('forecast', cache_key)
+            if cached:
+                logger.info(f"Cache hit: forecast/{cache_key}")
+                return cached
 
         try:
             delay_rate = self._prepare_delay_rate_series(history_months=12)
@@ -677,7 +713,7 @@ class ForecastingEngine:
 
         charts = [result['chart_base64'], result['bar_chart_base64'], pie_b64]
 
-        return {
+        output = {
             'summary_text':  summary,
             'chart_base64':  result['chart_base64'],
             'charts_base64': charts,
@@ -686,6 +722,12 @@ class ForecastingEngine:
             'method': 'SARIMA',
             'trend': result['trend'],
         }
+
+        if self.feature_store:
+            self.feature_store.set('forecast', cache_key, output, ttl=3600)
+            logger.info(f"Cached: forecast/{cache_key} (TTL=1h)")
+
+        return output
 
     def forecast_category(self, periods: int = 30, category: str = None) -> Dict[str, Any]:
         """
@@ -700,6 +742,13 @@ class ForecastingEngine:
         """
         if not STATSMODELS_AVAILABLE:
             return {'error': 'statsmodels not installed. Run: pip install statsmodels'}
+
+        cache_key = f"category_{category or 'top'}_{periods}"
+        if self.feature_store:
+            cached = self.feature_store.get('forecast', cache_key)
+            if cached:
+                logger.info(f"Cache hit: forecast/{cache_key}")
+                return cached
 
         try:
             cat_demand, cat_name = self._prepare_category_series(
@@ -744,7 +793,7 @@ class ForecastingEngine:
 
         charts = [result['chart_base64'], result['bar_chart_base64']]
 
-        return {
+        output = {
             'summary_text':  summary,
             'chart_base64':  result['chart_base64'],
             'charts_base64': charts,
@@ -754,6 +803,12 @@ class ForecastingEngine:
             'trend': result['trend'],
             'category': cat_name,
         }
+
+        if self.feature_store:
+            self.feature_store.set('forecast', cache_key, output, ttl=3600)
+            logger.info(f"Cached: forecast/{cache_key} (TTL=1h)")
+
+        return output
 
     def forecast_top_categories(self, periods: int = 30, top_n: int = 5) -> Dict[str, Any]:
         """

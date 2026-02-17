@@ -32,7 +32,7 @@ class AgentOrchestrator:
     Routes queries to the appropriate agent based on intent analysis
     """
 
-    def __init__(self, analytics_engine, data_wrapper, rag_module=None, use_langchain: bool = True):
+    def __init__(self, analytics_engine, data_wrapper, rag_module=None, use_langchain: bool = True, feature_store=None):
         """
         Initialize Agent Orchestrator
 
@@ -41,11 +41,13 @@ class AgentOrchestrator:
             data_wrapper: Data wrapper with orders, customers, products
             rag_module: RAG module for semantic search (optional)
             use_langchain: Whether to use LangChain agentic framework
+            feature_store: FeatureStore instance for caching (optional)
         """
         self.analytics = analytics_engine
         self.data = data_wrapper
         self.rag = rag_module
         self.use_langchain = use_langchain and LANGCHAIN_AVAILABLE
+        self.feature_store = feature_store
         self.conversation_history = []
 
         # Initialize Intent Classifier for better query routing
@@ -69,6 +71,12 @@ class AgentOrchestrator:
             else:
                 logger.warning("GROQ_API_KEY not found, LangChain agents disabled")
                 self.use_langchain = False
+
+        # Pass feature store to analytics engine for caching
+        if feature_store and hasattr(analytics_engine, 'feature_store'):
+            pass  # Already set
+        elif feature_store:
+            analytics_engine.feature_store = feature_store
 
         # Initialize specialized agents with RAG
         self.delay_agent = DelayAgent(
@@ -94,6 +102,7 @@ class AgentOrchestrator:
                 order_items_df=analytics_engine.order_items,
                 payments_df=getattr(analytics_engine, 'payments', None),
                 products_df=getattr(analytics_engine, 'products', None),
+                feature_store=feature_store,
             )
             logger.info("Advanced Forecasting Engine initialized (SARIMA — demand, revenue, delay rate, category)")
         except ImportError:

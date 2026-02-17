@@ -17,17 +17,24 @@ logger = logging.getLogger(__name__)
 class SCMAnalytics:
     """Supply Chain Management Analytics Engine"""
     
-    def __init__(self, data_processor):
+    def __init__(self, data_processor, feature_store=None):
         self.data_processor = data_processor
         self.orders = data_processor.orders
         self.order_items = data_processor.order_items
         self.products = data_processor.products
         self.payments = data_processor.payments
         self.customers = data_processor.customers
+        self.feature_store = feature_store
     
     def analyze_delivery_delays(self) -> Dict:
         """Analyze delivery delay patterns"""
         try:
+            if self.feature_store:
+                cached = self.feature_store.get('analytics', 'delivery_delays')
+                if cached:
+                    logger.info("Cache hit: analytics/delivery_delays")
+                    return cached
+
             logger.info("Analyzing delivery delays...")
             
             delayed_orders = self.orders[self.orders['is_delayed'] == True]
@@ -44,6 +51,10 @@ class SCMAnalytics:
             }
             
             logger.info(f"Delay analysis completed: {analysis['delay_rate_percentage']:.2f}% delay rate")
+
+            if self.feature_store:
+                self.feature_store.set('analytics', 'delivery_delays', analysis, ttl=1800)
+
             return analysis
 
         except Exception as e:
@@ -53,6 +64,13 @@ class SCMAnalytics:
     def analyze_product_delays(self, product_id: Optional[str] = None, category: Optional[str] = None) -> Dict:
        """Analyze delivery delays at product or category level"""
        try:
+           cache_key = f"product_delays_{product_id or 'all'}_{category or 'all'}"
+           if self.feature_store:
+               cached = self.feature_store.get('analytics', cache_key)
+               if cached:
+                   logger.info(f"Cache hit: analytics/{cache_key}")
+                   return cached
+
            logger.info(f"Analyzing product-level delivery delays (product_id={product_id}, category={category})...")
 
            # Merge orders with order items and products
@@ -148,6 +166,10 @@ class SCMAnalytics:
                    analysis['top_delayed_categories'] = top_delayed_categories.to_dict('records')
 
            logger.info(f"Product delay analysis completed: {analysis['delay_rate_percentage']:.2f}% delay rate for {filter_label}")
+
+           if self.feature_store:
+               self.feature_store.set('analytics', cache_key, analysis, ttl=1800)
+
            return analysis
 
        except Exception as e:
@@ -160,6 +182,12 @@ class SCMAnalytics:
     def analyze_revenue_trends(self) -> Dict:
         """Analyze revenue and sales trends"""
         try:
+            if self.feature_store:
+                cached = self.feature_store.get('analytics', 'revenue_trends')
+                if cached:
+                    logger.info("Cache hit: analytics/revenue_trends")
+                    return cached
+
             logger.info("Analyzing revenue trends...")
             
             # Merge orders with payments
@@ -193,8 +221,12 @@ class SCMAnalytics:
             }
             
             logger.info(f"Revenue analysis completed: Total revenue ${analysis['total_revenue']:,.2f}")
+
+            if self.feature_store:
+                self.feature_store.set('analytics', 'revenue_trends', analysis, ttl=3600)
+
             return analysis
-            
+
         except Exception as e:
             logger.error(f"Error analyzing revenue trends: {str(e)}")
             raise
@@ -202,6 +234,12 @@ class SCMAnalytics:
     def analyze_product_performance(self) -> Dict:
         """Analyze product sales performance"""
         try:
+            if self.feature_store:
+                cached = self.feature_store.get('analytics', 'product_performance')
+                if cached:
+                    logger.info("Cache hit: analytics/product_performance")
+                    return cached
+
             logger.info("Analyzing product performance...")
             
             # Merge order items with products
@@ -235,8 +273,12 @@ class SCMAnalytics:
             }
             
             logger.info(f"Product analysis completed: {analysis['total_unique_products']} unique products")
+
+            if self.feature_store:
+                self.feature_store.set('analytics', 'product_performance', analysis, ttl=3600)
+
             return analysis
-            
+
         except Exception as e:
             logger.error(f"Error analyzing product performance: {str(e)}")
             raise
@@ -244,6 +286,12 @@ class SCMAnalytics:
     def analyze_customer_behavior(self) -> Dict:
         """Analyze customer ordering patterns"""
         try:
+            if self.feature_store:
+                cached = self.feature_store.get('analytics', 'customer_behavior')
+                if cached:
+                    logger.info("Cache hit: analytics/customer_behavior")
+                    return cached
+
             logger.info("Analyzing customer behavior...")
             
             # Orders per customer
@@ -270,8 +318,12 @@ class SCMAnalytics:
             }
             
             logger.info(f"Customer analysis completed: {analysis['active_customers']} active customers")
+
+            if self.feature_store:
+                self.feature_store.set('analytics', 'customer_behavior', analysis, ttl=3600)
+
             return analysis
-            
+
         except Exception as e:
             logger.error(f"Error analyzing customer behavior: {str(e)}")
             raise
