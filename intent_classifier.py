@@ -20,11 +20,21 @@ class IntentClassifier:
     def __init__(self):
         # Policy question indicators
         self.policy_indicators = {
-            'question_words': ['what is', 'what are', 'define', 'explain', 'describe', 'tell me about'],
+            'question_words': ['what is', 'what are', 'define', 'explain', 'describe', 'tell me about',
+                              'how to', 'why should', 'when to', 'which approach', 'which method'],
             'policy_targets': ['policy', 'procedure', 'guideline', 'rule', 'standard', 'requirement',
                              'target', 'threshold', 'definition', 'classification', 'level', 'category'],
             'policy_concepts': ['severity level', 'critical delay', 'major delay', 'minor delay',
                                'kpi', 'key performance indicator', 'target rate', 'compliance'],
+            'conceptual_terms': ['approach', 'approaches', 'method', 'methods', 'strategy', 'strategies',
+                                'technique', 'techniques', 'best practice', 'best practices',
+                                'framework', 'frameworks', 'principle', 'principles',
+                                'concept', 'concepts', 'theory', 'theories', 'model', 'models',
+                                'way to', 'ways to', 'how to implement', 'implementation approach',
+                                'recommendation', 'recommendations', 'guideline', 'guidelines'],
+            'warehousing_concepts': ['warehousing', 'warehouse management', 'inventory management',
+                                    'stock management', 'distribution', 'logistics strategy',
+                                    'supply chain strategy', 'procurement strategy'],
         }
 
         # Data question indicators
@@ -154,6 +164,16 @@ class IntentClassifier:
             if concept in query_lower:
                 score += 2.5
 
+        # Check for conceptual/theoretical terms (approaches, methods, strategies, etc.)
+        for term in self.policy_indicators['conceptual_terms']:
+            if term in query_lower:
+                score += 3.5  # Very strong policy signal - these are almost always document questions
+
+        # Check for warehousing/SCM conceptual questions
+        for term in self.policy_indicators['warehousing_concepts']:
+            if term in query_lower:
+                score += 2.0  # Additional policy signal
+
         return score
 
     def _calculate_data_score(self, query_lower: str) -> float:
@@ -229,6 +249,9 @@ if __name__ == "__main__":
         "How many orders were delayed this month?",  # DATA - metric + time
         "What is the definition of major delay?",  # POLICY - definition
         "Calculate the current delay rate from database",  # DATA - explicit data request
+        "Three main approaches to use in warehousing",  # POLICY - conceptual question
+        "What are the best practices for inventory management?",  # POLICY - best practices
+        "Explain the strategies for supply chain optimization",  # POLICY - strategies/concepts
     ]
 
     print("Testing Intent Classifier:")

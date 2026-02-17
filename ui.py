@@ -1437,7 +1437,7 @@ def run_ui(app):
                                 ],
                                 value=current_mode,
                                 label="Execution Mode",
-                                info="Select how queries are processed"
+                                info=""
                             )
 
                             rag_selector = gr.Radio(
@@ -1447,7 +1447,7 @@ def run_ui(app):
                                 ],
                                 value="with_rag",
                                 label="RAG Configuration",
-                                info="Toggle document-based context retrieval",
+                                info="",
                                 visible=(current_mode == "enhanced")
                             )
 
@@ -1605,7 +1605,6 @@ def run_ui(app):
                             gr.Markdown("""
 **Tracked per Query:**
 - **Latency** - Response time in milliseconds
-- **Token Usage** - LLM tokens consumed
 - **Task Completion** - Success rate
 - **Hallucination Risk** - Data grounding score
 - **RAG Usage** - Document context retrieval
