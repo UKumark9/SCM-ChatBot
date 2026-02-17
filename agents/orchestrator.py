@@ -4,6 +4,7 @@ Routes queries to specialized agents based on intent
 """
 
 import logging
+import json
 from typing import Dict, Any, Optional, List
 import os
 import time
@@ -270,9 +271,139 @@ class AgentOrchestrator:
             intent['agents'] = [intent['agent']]
             intent['confidence'] = min(max_score / 10.0, 0.95)  # Normalize, cap at 0.95
 
-        logger.info(f"Intent analysis: {intent['agent']} (confidence: {intent['confidence']:.2f}, agents: {intent['agents']})")
+        logger.info(
+            f"Intent analysis (keyword): agent={intent['agent']}, "
+            f"confidence={intent['confidence']:.2f}, agents={intent['agents']}"
+        )
+
+        # Hybrid path: if keyword confidence is too low, upgrade with LLM routing
+        LLM_FALLBACK_THRESHOLD = 0.6
+        if intent['confidence'] < LLM_FALLBACK_THRESHOLD and self.llm_client is not None:
+            logger.info(
+                f"Confidence {intent['confidence']:.2f} < {LLM_FALLBACK_THRESHOLD}, "
+                "invoking LLM router"
+            )
+            intent = self._llm_route(query, intent)
 
         return intent
+
+    def _llm_route(self, query: str, keyword_intent: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        LLM-based fallback router called when keyword scoring confidence < 0.6.
+        Uses self.llm_client (Groq Llama 3.3 70B) with temperature=0 to produce
+        structured JSON routing decisions.
+
+        Args:
+            query: The original user query.
+            keyword_intent: The result from analyze_intent(), used as fallback
+                            if the LLM call fails.
+
+        Returns:
+            An intent dict in the same format as analyze_intent().
+            On any exception, returns keyword_intent unchanged.
+        """
+        if self.llm_client is None:
+            logger.debug("_llm_route: no llm_client available, returning keyword result")
+            return keyword_intent
+
+        try:
+            from langchain_core.messages import HumanMessage, SystemMessage
+
+            system_prompt = (
+                "You are a routing engine for a Supply Chain Management chatbot. "
+                "Your only job is to decide which specialized agent(s) should handle the user query.\n\n"
+                "Available agents:\n"
+                "  - delay      : delivery delays, on-time rates, late shipments, carrier performance\n"
+                "  - analytics  : revenue, sales, profit, customer behaviour, order value, performance\n"
+                "  - forecasting: demand forecast, SARIMA, time-series, predict revenue/delay rate/category\n"
+                "  - data_query : show/list/find specific orders, customers, products, raw data retrieval\n\n"
+                "Rules:\n"
+                "1. If the query clearly targets ONE agent, set multi_intent=false and agents to that one.\n"
+                "2. If the query contains multiple distinct questions for different agents, set multi_intent=true "
+                "and list each agent exactly once.\n"
+                "3. If multi_intent is true, produce a sub_queries dict mapping each agent name to "
+                "the portion of the query most relevant to it.\n"
+                "4. confidence must be a float between 0.0 and 0.95.\n"
+                "5. Respond ONLY with valid JSON. No explanation, no markdown fences, no extra text.\n\n"
+                "JSON schema:\n"
+                "{\n"
+                '  "agent": "<primary agent name or multi_agent>",\n'
+                '  "agents": ["<agent1>", ...],\n'
+                '  "confidence": <float>,\n'
+                '  "multi_intent": <bool>,\n'
+                '  "sub_queries": {"<agent>": "<sub-query>", ...},\n'
+                '  "execution_order": ["<agent>", ...]\n'
+                "}\n"
+            )
+
+            user_prompt = f'Route this query: "{query}"'
+
+            # Use temperature=0 for deterministic routing
+            routing_llm = self.llm_client.bind(temperature=0)
+            messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_prompt),
+            ]
+            response = routing_llm.invoke(messages)
+            raw = response.content.strip()
+
+            # Strip accidental markdown fences if the model adds them
+            if raw.startswith("```"):
+                raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+                raw = raw.strip()
+
+            parsed = json.loads(raw)
+
+            # Validate and normalise parsed fields
+            valid_agents = {'delay', 'analytics', 'forecasting', 'data_query'}
+
+            agent_val = parsed.get('agent', 'analytics')
+            agents_val = [a for a in parsed.get('agents', [agent_val]) if a in valid_agents]
+            if not agents_val:
+                agents_val = ['analytics']
+                agent_val = 'analytics'
+
+            multi_intent = bool(parsed.get('multi_intent', len(agents_val) > 1))
+            if multi_intent and agent_val not in ('multi_agent', 'comprehensive'):
+                agent_val = 'multi_agent'
+
+            confidence = float(parsed.get('confidence', 0.75))
+            confidence = max(0.0, min(confidence, 0.95))
+
+            sub_queries = {
+                k: v for k, v in parsed.get('sub_queries', {}).items()
+                if k in valid_agents
+            }
+            for a in agents_val:
+                if a not in sub_queries:
+                    sub_queries[a] = query
+
+            exec_order = [a for a in parsed.get('execution_order', []) if a in valid_agents]
+            if not exec_order:
+                exec_order = self._get_execution_order(agents_val)
+
+            llm_intent = {
+                'agent': agent_val,
+                'agents': agents_val,
+                'confidence': confidence,
+                'keywords': keyword_intent.get('keywords', {}),
+                'multi_intent': multi_intent,
+                'sub_queries': sub_queries,
+                'execution_order': exec_order,
+                'routed_by': 'llm',
+            }
+
+            logger.info(
+                f"LLM router: agent={agent_val}, agents={agents_val}, "
+                f"confidence={confidence:.2f}, multi_intent={multi_intent}"
+            )
+            return llm_intent
+
+        except Exception as e:
+            logger.warning(f"_llm_route failed ({e}), falling back to keyword result")
+            return keyword_intent
 
     def _decompose_query(self, query: str, agents: List[str]) -> Dict[str, str]:
         """
@@ -361,6 +492,13 @@ class AgentOrchestrator:
 
             # Analyze intent for agent routing
             intent = self.analyze_intent(query)
+
+            # Log which router was responsible
+            logger.info(
+                f"Final routing: agent={intent['agent']}, "
+                f"confidence={intent['confidence']:.2f}, "
+                f"routed_by={intent.get('routed_by', 'keyword')}"
+            )
 
             # Add classification to intent
             intent['classification'] = classification
