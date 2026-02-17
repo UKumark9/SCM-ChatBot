@@ -128,7 +128,7 @@ def generate_delay_charts(app):
 
 
 def run_ui(app):
-    """Production-quality Gradio UI with modern design"""
+    """ Gradio UI with modern design"""
     try:
         # Determine current mode (default to agentic if both available)
         if app.orchestrator and app.enhanced_chatbot:

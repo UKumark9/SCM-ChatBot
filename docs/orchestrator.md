@@ -1,464 +1,143 @@
-# agents/orchestrator.py - Multi-Agent System Coordinator
+# Agent Orchestrator
 
 ## Purpose
-Central orchestrator that manages multiple specialized agents, routes queries based on intent analysis, and integrates intent classification for intelligent RAG usage. Provides intelligent query routing and parallel agent execution.
 
-## Key Components
+The `AgentOrchestrator` is the **central controller** for the multi-agent SCM (Supply Chain Management) system. It receives user queries, determines which specialized agent(s) should handle them, and returns formatted responses.
 
-### Class: AgentOrchestrator
-Manages and coordinates specialized agents for different SCM domains.
+## Architecture
 
-**Initialization Parameters:**
-- `analytics_engine`: SCMAnalytics instance
-- `data_wrapper`: Database wrapper
-- `rag_module`: RAGModule instance (optional)
-- `use_langchain` (bool): Enable LangChain agentic framework
+### Initialization (lines 35-123)
+Sets up:
+- **4 specialized agents**: `DelayAgent`, `AnalyticsAgent`, `ForecastingAgent`, `DataQueryAgent`
+- **LLM client**: Groq's `llama-3.3-70b-versatile` via LangChain (temperature=0.1)
+- **IntentClassifier**: for query type classification (policy vs data vs mixed)
+- **ForecastingEngine**: SARIMA-based forecasting (demand, revenue, delay rate, category)
+- Each agent receives the shared LLM client, RAG module, and its relevant data sources
 
-## Core Methods
+### Intent Analysis — Hybrid Approach (lines 125-288)
 
-### `__init__(analytics_engine, data_wrapper, rag_module=None, use_langchain=False)`
-Initializes orchestrator with all specialized agents.
+`analyze_intent()` uses a **two-tier hybrid routing system**:
 
-**Agents Initialized:**
-- **DelayAgent**: Delivery delays and on-time performance
-- **AnalyticsAgent**: Revenue and product analytics
-- **ForecastingAgent**: Demand forecasting
-- **DataQueryAgent**: Raw data retrieval
+#### Tier 1: Keyword/Phrase Scoring (fast path, ~0ms)
 
-**Systems Initialized:**
-- **IntentClassifier**: Query type classification (policy/data/mixed)
-- **MetricsTracker**: Performance monitoring
-- **UIFormatter**: Response formatting
+Scores the query against 4 agent domains using substring matching:
 
-**Example:**
-```python
-orchestrator = AgentOrchestrator(
-    analytics_engine=analytics,
-    data_wrapper=data,
-    rag_module=rag,
-    use_langchain=False
-)
+| Agent | Trigger Keywords | Trigger Phrases |
+|-------|-----------------|-----------------|
+| Delay | delay, late, delivery, on-time, shipped, arrived | delivery delay, late delivery, delivery performance |
+| Analytics | revenue, sales, profit, performance, behavior, analysis | total revenue, customer behavior, sales performance |
+| Forecasting | forecast, predict, demand, sarima, prophet, seasonal | demand forecast, revenue forecast, time series forecast |
+| Data Query | show, list, get, find, display, customers, orders, top | show me, find order, top products, monthly trend |
+
+Scoring: keywords = +1 point, phrases = +2 points. Confidence = `min(max_score / 10, 0.95)`.
+
+Routing decisions:
+- **Multi-intent**: 2+ agents score >= 2 (or >= 1 with conjunctions like "and") -> confidence 0.85
+- **Comprehensive**: keywords like "report", "overview" score >= 2 -> confidence 0.90
+- **Single-intent**: highest-scoring agent -> confidence 0.10-0.95
+- **No match**: defaults to analytics -> confidence 0.50
+
+#### Tier 2: LLM Fallback Router (lines 290-406)
+
+When keyword confidence < 0.6, `_llm_route()` is invoked to make the routing decision using the LLM:
+
+- **Model**: same `self.llm_client` (Llama 3.3 70B via Groq), bound to temperature=0 for deterministic output
+- **Prompt**: system message describing the 4 agents + JSON schema for structured output
+- **Output**: JSON with `agent`, `agents`, `confidence`, `multi_intent`, `sub_queries`, `execution_order`
+- **Validation**: agent names checked against whitelist, confidence clamped 0.0-0.95, missing fields get defaults
+- **Fallback**: on any error (network, JSON parse, validation), silently returns the keyword result with a warning log
+- **Provenance**: adds `'routed_by': 'llm'` to the intent dict for logging/debugging
+
+| Scenario | Keyword Confidence | LLM Triggered? |
+|----------|-------------------|----------------|
+| No keywords match (score=0) | 0.50 | Yes |
+| Weak match (score 1-5) | 0.10-0.50 | Yes |
+| Strong match (score >= 6) | >= 0.60 | No |
+| Multi-intent detected | 0.85 | No |
+| Comprehensive report | 0.90 | No |
+
+### Query Routing (lines 476-546)
+`route_query()` is the main dispatch method:
+1. Classifies the query via `IntentClassifier` (RAG vs database vs both)
+2. Runs `analyze_intent()` (keyword scoring + optional LLM fallback)
+3. Logs routing provenance (`routed_by=keyword` or `routed_by=llm`)
+4. Dispatches to the appropriate handler (single agent, multi-agent, or comprehensive)
+5. Attaches metadata (intent, classification, orchestrator type)
+6. Stores in conversation history
+
+### Query Decomposition (lines 408-453)
+`_decompose_query()` splits compound queries on conjunctions ("and", "also", "plus") and assigns segments to agents based on keyword presence.
+
+### Execution Order (lines 455-474)
+`_get_execution_order()` determines agent priority: data_query (1) -> delay (2) -> analytics (3) -> forecasting (4). Data query runs first because it provides context for other agents.
+
+### Multi-Intent Handling (lines 548-669)
+For compound queries (e.g., "show delay rate and forecast demand"):
+1. **Decomposes** the query into sub-queries per agent
+2. **Executes** agents in priority order
+3. **Extracts** intermediate metrics (delay rate, revenue, forecast trend) for cross-agent analysis
+4. **Combines** results with markdown section headers separated by `---`
+5. **Generates cross-agent insights** (e.g., "high delays + growing demand = supply chain risk")
+
+### Cross-Agent Insights (lines 711-786)
+Rule-based insight generation from extracted metrics across agent domains:
+
+| Agent Pair | Insight Example |
+|-----------|----------------|
+| Delay + Forecasting | High delay + increasing demand = supply chain risk |
+| Delay + Forecasting | Low delay + increasing demand = growth opportunity |
+| Delay + Analytics | High delay rate = potential revenue impact |
+| Analytics + Forecasting | Increasing demand = review inventory levels |
+| 3+ agents | Holistic view recommendation for strategic planning |
+
+### Comprehensive Query Handler (lines 788-831)
+Triggered by keywords like "comprehensive", "report", "overview". Invokes all 3 main agents (delay, analytics, forecasting) with predefined queries and combines results under a single report heading.
+
+### Public API (lines 833-916)
+`query()` is the main entry point called by the UI:
+1. Starts metrics tracking (latency, data sources, hallucination score)
+2. Calls `route_query()`
+3. Formats the response via `UIFormatter.format_response()`
+4. Returns a formatted markdown string
+
+### Helper Methods
+- `_format_compact_metrics()` (lines 918-955): Formats latency, data sources, hallucination score as compact icons
+- `_build_agent_info()` (lines 957-977): Builds agent execution info footer with status
+- `clear_history()` (lines 979-982): Clears conversation history
+
+## Data Flow
+```
+User Query
+  |
+  v
+IntentClassifier.classify_query()  -->  policy / data / mixed
+  |
+  v
+analyze_intent()
+  |-- Keyword Scoring (Tier 1)
+  |     confidence >= 0.6?  -->  use keyword result
+  |     confidence < 0.6?   -->  _llm_route() (Tier 2, LLM fallback)
+  |
+  v
+route_query()
+  |-- Single Agent   -->  delay / analytics / forecasting / data_query
+  |-- Multi-Agent    -->  _handle_multi_intent_query()
+  |-- Comprehensive  -->  _handle_comprehensive_query()
+  |
+  v
+UIFormatter.format_response()
+  |
+  v
+Formatted Markdown Response
 ```
 
-### `analyze_intent(query)`
-Analyzes query to determine appropriate agent.
-
-**Parameters:**
-- `query` (str): User's question
-
-**Returns:** dict with intent analysis
-
-**Intent Structure:**
-```python
-{
-    'agent': 'delay' | 'forecasting' | 'analytics' | 'data_query' | 'multi_agent',
-    'domain': str,
-    'complexity': 'simple' | 'moderate' | 'complex',
-    'multi_intent': bool,
-    'requires_rag': bool,
-    'geographic': bool,
-    'product_specific': bool
-}
-```
-
-**Agent Selection:**
-- **delay**: Delay, delivery, on-time queries
-- **forecasting**: Forecast, predict, demand queries
-- **analytics**: Revenue, product, sales queries
-- **data_query**: Show, list, get queries
-- **multi_agent**: Complex queries requiring multiple agents
-
-**Example:**
-```python
-intent = orchestrator.analyze_intent("What is the delay rate?")
-# Returns: {'agent': 'delay', 'domain': 'delivery', 'complexity': 'simple'}
-```
-
-### `route_query(query)`
-Routes query to appropriate agent(s) based on intent classification.
-
-**Parameters:**
-- `query` (str): User's question
-
-**Returns:** dict with agent response
-
-**Process:**
-1. **Classify query** using IntentClassifier
-   - Determines policy/data/mixed type
-   - Sets use_rag and use_database flags
-
-2. **Analyze intent** for agent selection
-   - Determines which agent(s) to use
-   - Detects multi-intent queries
-
-3. **Route to agent** with classification
-   - Passes classification to agent
-   - Agent respects RAG/database flags
-
-4. **Add metadata** to result
-   - Intent, classification, orchestrator info
-   - Store in conversation history
-
-**Example:**
-```python
-result = orchestrator.route_query("What is the delay rate?")
-# Classification: DATA (use_rag=False, use_database=True)
-# Routes to: DelayAgent
-# Time: ~3-5s (no RAG overhead)
-```
-
-**Classification Integration:**
-```
-Query: "What is the delay rate?"
-↓
-IntentClassifier: DATA (use_rag=False, use_database=True)
-↓
-DelayAgent: Queries database only, skips RAG
-↓
-Response: "6.28%" (fast, focused)
-```
-
-### `query(user_query, show_agent=True, show_metrics=True)`
-Main query processing method with metrics tracking.
-
-**Parameters:**
-- `user_query` (str): User's question
-- `show_agent` (bool): Include agent metadata in response
-- `show_metrics` (bool): Include performance metrics
-
-**Returns:** str (formatted response)
-
-**Full Process:**
-1. Start metrics tracking
-2. Route query to appropriate agent(s)
-3. Collect agent responses
-4. Track agent execution and data sources
-5. Calculate hallucination score
-6. Format response with UIFormatter
-7. End metrics tracking
-8. Return formatted response
-
-**Example:**
-```python
-response = orchestrator.query("What is the delay rate?")
-print(response)
-```
-
-**Output:**
-```
-The delivery delay rate is 6.28%.
-
-────────────────────────────────────────────────────────────
-🤖 Agent: Delay Agent | ✅ Success
-📁 Sources: Database
-⏱️ Time: 3.21s
-────────────────────────────────────────────────────────────
-```
-
-### `_handle_multi_intent_query(query, intent)`
-Handles queries requiring multiple agents.
-
-**Parameters:**
-- `query` (str): User's question
-- `intent` (dict): Intent analysis
-
-**Process:**
-1. Identifies required agents
-2. Executes agents in parallel (if possible)
-3. Aggregates results
-4. Returns combined response
-
-**Example Multi-Intent Queries:**
-- "Compare delays with revenue impact"
-- "Show delivery and forecast data"
-- "Analyze delays by product and state"
-
-### `_handle_comprehensive_query(query)`
-Handles comprehensive queries needing all agents.
-
-**Parameters:**
-- `query` (str): User's question
-
-**Returns:** dict with aggregated results
-
-**Use Cases:**
-- "Give me complete SCM overview"
-- "Show all metrics"
-- "Comprehensive analysis"
-
-## Agent Routing Logic
-
-### Delay Agent
-**Triggers:**
-- Keywords: "delay", "delivery", "on-time", "late", "ship"
-- Queries: "What is delay rate?", "Show delayed orders"
-
-**Classification Impact:**
-- DATA queries: Database only (~3-5s)
-- POLICY queries: RAG only (~15s)
-- MIXED queries: Both sources (~18s)
-
-### Analytics Agent
-**Triggers:**
-- Keywords: "revenue", "sales", "product", "performance"
-- Queries: "Show revenue by product", "Top selling products"
-
-**Classification Impact:**
-- Same as Delay Agent (DATA/POLICY/MIXED)
-
-### Forecasting Agent
-**Triggers:**
-- Keywords: "forecast", "predict", "demand", "future", "trend"
-- Queries: "Forecast next month demand", "Predict product trends"
-
-**Classification Impact:**
-- Usually DATA (database forecasting models)
-- Rarely uses RAG (unless policy questions)
-
-### Data Query Agent
-**Triggers:**
-- Keywords: "show", "list", "get", "retrieve", "display"
-- Queries: "Show all orders", "List products"
-
-**Classification Impact:**
-- Always DATA (pure database queries)
-- Never uses RAG
-
-## Intent Classification Integration
-
-### Before Classification
-```python
-# All queries use RAG + Database
-result = delay_agent.query(query)
-# Time: 45-60s (RAG overhead even for data queries)
-```
-
-### After Classification
-```python
-# Classify query first
-classification = intent_classifier.classify_query(query)
-# {'query_type': 'data', 'use_rag': False, 'use_database': True}
-
-# Route with classification
-result = delay_agent.query(query, classification=classification)
-# Time: 3-5s (skips RAG for data queries)
-```
-
-### Performance Impact
-- **Data queries**: 60-80% faster (skip RAG)
-- **Policy queries**: Same speed (RAG still used)
-- **Mixed queries**: Slight improvement (optimized routing)
-
-## Metrics Tracking
-
-### Tracked Metrics
-- Query start/end time
-- Agents executed
-- Data sources used (RAG, database)
-- RAG usage flag
-- Hallucination score
-- Success/failure status
-
-### Integration Example
-```python
-# Start tracking
-query_id = metrics_tracker.start_query(query, mode='agentic')
-
-# Track agent execution
-metrics_tracker.add_agent_execution(query_id, "Delay Agent", used_rag=False)
-
-# Track data sources
-metrics_tracker.add_data_source(query_id, "analytics_engine")
-
-# End tracking
-metrics_tracker.end_query(query_id, success=True)
-```
-
-## UIFormatter Integration
-
-All responses formatted consistently:
-```python
-# Agent returns raw result
-result = agent.query(query, classification=classification)
-
-# Orchestrator formats with UIFormatter
-formatted = UIFormatter.format_response(result)
-# Returns professionally formatted response with metadata
-```
-
-## Helper Methods
-
-### `_build_agent_info(agent_name, time_taken, rag_used=False)`
-Builds agent metadata footer.
-
-**Parameters:**
-- `agent_name` (str): Agent name
-- `time_taken` (float): Execution time
-- `rag_used` (bool): Whether RAG was used
-
-**Returns:** str (formatted metadata)
-
-### `clear_history()`
-Clears conversation history.
-
-**Use Cases:**
-- Reset context
-- Fresh conversation
-- Testing
-
-## Dependencies
-
-### External Libraries
-- `logging`: Application logging
-- `time`: Performance tracking
-- `os`: Environment variables
-
-### Internal Modules
-- `agents.delay_agent`: Delay analysis
-- `agents.analytics_agent`: Revenue analytics
-- `agents.forecasting_agent`: Demand forecasting
-- `agents.data_query_agent`: Data retrieval
-- `ui_formatter`: Response formatting
-- `intent_classifier`: Query classification
-- `metrics_tracker`: Performance tracking
-
-## Usage Examples
-
-### Example 1: Simple Data Query
-```python
-orchestrator = AgentOrchestrator(analytics, data, rag)
-
-response = orchestrator.query("What is the delay rate?")
-# Classification: DATA
-# Agent: DelayAgent
-# RAG: Not used
-# Time: ~3-5s
-# Response: "6.28%"
-```
-
-### Example 2: Policy Query
-```python
-response = orchestrator.query("What are severity levels?")
-# Classification: POLICY
-# Agent: DelayAgent
-# RAG: Used
-# Time: ~15s
-# Response: Policy definitions
-```
-
-### Example 3: Mixed Query
-```python
-response = orchestrator.query("Compare actual delay with target policy")
-# Classification: MIXED
-# Agent: DelayAgent
-# RAG: Used
-# Database: Used
-# Time: ~18s
-# Response: Comparison with both sources
-```
-
-### Example 4: Multi-Agent Query
-```python
-response = orchestrator.query("Show delays and revenue by state")
-# Classification: DATA
-# Agents: DelayAgent, AnalyticsAgent
-# Execution: Parallel
-# Time: ~5-7s
-# Response: Combined results
-```
-
-## Conversation History
-
-Tracks all queries and responses:
-```python
-{
-    'query': str,
-    'response': dict,
-    'intent': dict,
-    'classification': dict
-}
-```
-
-**Use Cases:**
-- Multi-turn conversations
-- Context-aware responses
-- Performance analysis
-
-## Error Handling
-
-### Agent Execution Error
-- Logs error with traceback
-- Returns error response
-- Tracks in metrics as failed query
-
-### Classification Error
-- Falls back to default (DATA classification)
-- Logs warning
-- Continues with query processing
-
-### RAG Unavailable
-- Continues without RAG context
-- Logs warning
-- Uses database only
-
-## Performance Characteristics
-
-### Query Latency
-- **Data queries**: 3-5s (no RAG)
-- **Policy queries**: 15s (RAG only)
-- **Mixed queries**: 18s (both sources)
-- **Multi-agent**: 5-10s (depends on agents)
-
-### Resource Usage
-- Memory: ~50-100MB (agents + models)
-- CPU: Low (mostly I/O bound)
-- Network: API calls for RAG/LLM (if used)
-
-## Logging
-
-Log messages include:
-- Query classification results
-- Agent routing decisions
-- Execution times
-- Data sources used
-- Errors with tracebacks
-
-**Example:**
-```
-INFO - Query Classification: data | Domain: delay | Confidence: 0.50
-INFO -   → Use RAG: False | Use Database: True
-INFO - Routing to: Delay Agent
-DEBUG - Agent execution time: 3.21s
-INFO - Query completed successfully
-```
-
-## Comparison: Before vs After Intent Classification
-
-### Before
-```
-Query: "What is delay rate?"
-→ Always uses RAG + Database
-→ Time: 45-60s
-→ Unnecessary RAG overhead
-```
-
-### After
-```
-Query: "What is delay rate?"
-→ Classification: DATA (use_rag=False)
-→ Uses Database only
-→ Time: 3-5s
-→ 60-80% faster!
-```
-
-## Integration Points
-
-### Used By
-- `main.py`: Routes all agentic mode queries
-
-### Uses
-- `IntentClassifier`: Query classification
-- All agents: Specialized processing
-- `UIFormatter`: Response formatting
-- `MetricsTracker`: Performance tracking
-- `RAGModule`: Policy retrieval (when needed)
+## LLM Usage Summary
+
+| Component | Uses LLM? | Purpose |
+|-----------|-----------|---------|
+| Keyword scoring (`analyze_intent`) | No | Fast substring matching |
+| LLM fallback (`_llm_route`) | Yes (conditional) | Route ambiguous queries |
+| Query decomposition | No | String split on conjunctions |
+| Cross-agent insights | No | Hardcoded if/else rules |
+| Execution order | No | Static priority map |
+| Agent responses | Yes (always) | LangChain tool-calling agents generate answers |
