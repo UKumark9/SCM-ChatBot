@@ -2,9 +2,11 @@
 Gradio UI Module for SCM Chatbot
 """
 
+import datetime
 import logging
 import os
 import tempfile
+import time
 
 import matplotlib
 matplotlib.use('Agg')
@@ -13,6 +15,29 @@ import matplotlib.pyplot as plt
 import gradio as gr
 
 logger = logging.getLogger(__name__)
+
+
+def _style_dark_axes(ax, title, xlabel=None, ylabel=None):
+    """Apply the dark-theme axis styling shared by every chart in this module"""
+    ax.set_facecolor('#1e293b')
+    if xlabel:
+        ax.set_xlabel(xlabel, color='#94a3b8', fontsize=10)
+    if ylabel:
+        ax.set_ylabel(ylabel, color='#94a3b8', fontsize=10)
+    ax.set_title(title, color='#f1f5f9', fontweight='bold', fontsize=13, pad=12)
+    ax.tick_params(colors='#94a3b8')
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_color('#334155')
+    ax.spines['bottom'].set_color('#334155')
+
+
+def _save_chart(fig, filename):
+    """Save a chart to the temp dir with the shared dark background, then close it"""
+    path = os.path.join(tempfile.gettempdir(), filename)
+    fig.savefig(path, dpi=150, bbox_inches='tight', facecolor='#1e293b')
+    plt.close(fig)
+    return path
 
 
 def generate_delay_charts(app):
@@ -24,7 +49,6 @@ def generate_delay_charts(app):
         # ── Chart 1: On-Time vs Delayed ──
         fig, ax = plt.subplots(figsize=(5, 3.5))
         fig.patch.set_facecolor('#1e293b')
-        ax.set_facecolor('#1e293b')
 
         on_time_pct = 100 - result['delay_rate_percentage']
         delay_pct = result['delay_rate_percentage']
@@ -38,19 +62,9 @@ def generate_delay_charts(app):
                     f'{val:.1f}%', ha='center', va='bottom',
                     color='#f1f5f9', fontweight='bold', fontsize=13)
 
-        ax.set_ylabel('Percentage', color='#94a3b8', fontsize=10)
-        ax.set_title('Delivery Performance Overview', color='#f1f5f9', fontweight='bold', fontsize=13, pad=12)
-        ax.tick_params(colors='#94a3b8')
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['left'].set_color('#334155')
-        ax.spines['bottom'].set_color('#334155')
+        _style_dark_axes(ax, 'Delivery Performance Overview', ylabel='Percentage')
         ax.set_ylim(0, max(values) * 1.25)
-
-        path = os.path.join(tempfile.gettempdir(), 'delay_overview.png')
-        fig.savefig(path, dpi=150, bbox_inches='tight', facecolor='#1e293b')
-        plt.close(fig)
-        charts.append(path)
+        charts.append(_save_chart(fig, 'delay_overview.png'))
 
         # ── Chart 2: Top 10 States by Delay Rate ──
         delays_by_state = result.get('delays_by_state', {})
@@ -62,7 +76,6 @@ def generate_delay_charts(app):
 
             fig, ax = plt.subplots(figsize=(7, 4.5))
             fig.patch.set_facecolor('#1e293b')
-            ax.set_facecolor('#1e293b')
 
             states = [s[0] for s in reversed(sorted_states)]
             rates = [s[1] for s in reversed(sorted_states)]
@@ -73,19 +86,9 @@ def generate_delay_charts(app):
                 ax.text(bar.get_width() + 0.3, bar.get_y() + bar.get_height() / 2,
                         f'{val:.1f}%', va='center', color='#f1f5f9', fontsize=10)
 
-            ax.set_xlabel('Delay Rate (%)', color='#94a3b8', fontsize=10)
-            ax.set_title('Top 10 States by Delay Rate', color='#f1f5f9', fontweight='bold', fontsize=13, pad=12)
-            ax.tick_params(colors='#94a3b8')
-            ax.spines['top'].set_visible(False)
-            ax.spines['right'].set_visible(False)
-            ax.spines['left'].set_color('#334155')
-            ax.spines['bottom'].set_color('#334155')
+            _style_dark_axes(ax, 'Top 10 States by Delay Rate', xlabel='Delay Rate (%)')
             ax.set_xlim(0, max(rates) * 1.2)
-
-            path = os.path.join(tempfile.gettempdir(), 'delay_states.png')
-            fig.savefig(path, dpi=150, bbox_inches='tight', facecolor='#1e293b')
-            plt.close(fig)
-            charts.append(path)
+            charts.append(_save_chart(fig, 'delay_states.png'))
 
         # ── Chart 3: Delay Severity Distribution ──
         orders = app.orders
@@ -97,7 +100,6 @@ def generate_delay_charts(app):
 
         fig, ax = plt.subplots(figsize=(6, 3.5))
         fig.patch.set_facecolor('#1e293b')
-        ax.set_facecolor('#1e293b')
 
         cats = ['On-Time', 'Minor\n(1-2 days)', 'Major\n(3-5 days)', 'Critical\n(>5 days)']
         vals = [on_time_count, minor, major, critical]
@@ -109,22 +111,130 @@ def generate_delay_charts(app):
                     f'{val:,}', ha='center', va='bottom',
                     color='#f1f5f9', fontweight='bold', fontsize=11)
 
-        ax.set_ylabel('Number of Orders', color='#94a3b8', fontsize=10)
-        ax.set_title('Delay Severity Distribution', color='#f1f5f9', fontweight='bold', fontsize=13, pad=12)
-        ax.tick_params(colors='#94a3b8')
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['left'].set_color('#334155')
-        ax.spines['bottom'].set_color('#334155')
-
-        path = os.path.join(tempfile.gettempdir(), 'delay_severity.png')
-        fig.savefig(path, dpi=150, bbox_inches='tight', facecolor='#1e293b')
-        plt.close(fig)
-        charts.append(path)
+        _style_dark_axes(ax, 'Delay Severity Distribution', ylabel='Number of Orders')
+        charts.append(_save_chart(fig, 'delay_severity.png'))
 
     except Exception as e:
         logger.error(f"Chart generation error: {e}")
     return charts
+
+
+def generate_revenue_charts(app):
+    """Generate matplotlib charts for revenue analysis, styled for dark theme."""
+    charts = []
+    try:
+        result = app.analytics.analyze_revenue_trends()
+
+        # ── Chart 1: Monthly Revenue Trend ──
+        monthly = result.get('monthly_revenue', {})
+        if monthly:
+            months = list(monthly.keys())
+            values = list(monthly.values())
+
+            fig, ax = plt.subplots(figsize=(7, 4))
+            fig.patch.set_facecolor('#1e293b')
+            ax.plot(range(len(months)), values, color='#6366f1', marker='o', markersize=4, linewidth=2)
+            ax.fill_between(range(len(months)), values, color='#6366f1', alpha=0.1)
+
+            _style_dark_axes(ax, 'Monthly Revenue Trend', ylabel='Revenue ($)')
+            ax.set_xticks(range(len(months)))
+            ax.set_xticklabels(months, rotation=45, ha='right', fontsize=8)
+            charts.append(_save_chart(fig, 'revenue_trend.png'))
+
+        # ── Chart 2: Top 10 States by Revenue ──
+        by_state = result.get('revenue_by_state', {})
+        if by_state:
+            sorted_states = sorted(by_state.items(), key=lambda x: x[1], reverse=True)[:10]
+            states = [s[0] for s in reversed(sorted_states)]
+            values = [s[1] for s in reversed(sorted_states)]
+
+            fig, ax = plt.subplots(figsize=(7, 4.5))
+            fig.patch.set_facecolor('#1e293b')
+            bars = ax.barh(states, values, color='#6366f1', height=0.6, edgecolor='none')
+            for bar, val in zip(bars, values):
+                ax.text(bar.get_width() + max(values) * 0.01, bar.get_y() + bar.get_height() / 2,
+                        f'${val:,.0f}', va='center', color='#f1f5f9', fontsize=9)
+
+            _style_dark_axes(ax, 'Top 10 States by Revenue', xlabel='Revenue ($)')
+            ax.set_xlim(0, max(values) * 1.2)
+            charts.append(_save_chart(fig, 'revenue_states.png'))
+
+    except Exception as e:
+        logger.error(f"Revenue chart generation error: {e}")
+    return charts
+
+
+def generate_forecast_charts(app, periods=30):
+    """Generate a historical + forecast demand chart, styled for dark theme."""
+    charts = []
+    try:
+        result = app.analytics.forecast_demand(periods=periods)
+        forecast = result.get('forecast', {})
+        if not forecast:
+            return charts
+
+        import pandas as pd
+
+        # Recent historical daily order volume, mirroring the groupby forecast_demand() does internally
+        sales = app.order_items.merge(
+            app.orders[['order_id', 'order_purchase_timestamp']], on='order_id'
+        )
+        sales['date'] = pd.to_datetime(sales['order_purchase_timestamp']).dt.date
+        daily = sales.groupby('date').size().sort_index()
+        recent_history = daily.tail(60)
+
+        forecast_dates = [pd.Timestamp(d).date() for d in forecast.keys()]
+        forecast_values = list(forecast.values())
+
+        fig, ax = plt.subplots(figsize=(8, 4.5))
+        fig.patch.set_facecolor('#1e293b')
+        ax.plot(recent_history.index, recent_history.values, color='#10b981', linewidth=2, label='Historical')
+        ax.plot(forecast_dates, forecast_values, color='#f59e0b', linewidth=2, linestyle='--', label='Forecast')
+        ax.axvline(recent_history.index[-1], color='#94a3b8', linestyle=':', linewidth=1)
+
+        _style_dark_axes(ax, f'Demand Forecast ({periods} Days)', ylabel='Orders')
+        ax.legend(facecolor='#1e293b', edgecolor='#334155', labelcolor='#f1f5f9', fontsize=9)
+        fig.autofmt_xdate()
+        charts.append(_save_chart(fig, 'demand_forecast.png'))
+
+    except Exception as e:
+        logger.error(f"Forecast chart generation error: {e}")
+    return charts
+
+
+# ── Topic keywords shared between chart-triggering and follow-up suggestions ──
+ANALYSIS_WORDS = ['statistic', 'analyze', 'analysis', 'show', 'overview',
+                  'performance', 'report', 'chart', 'graph', 'visual', 'dashboard']
+DELAY_WORDS = ['delay', 'delivery', 'on-time', 'on time', 'late', 'delayed', 'overdue']
+REVENUE_WORDS = ['revenue', 'sales', 'income', 'earnings', 'profit']
+FORECAST_WORDS = ['forecast', 'predict', 'prediction', 'projection', 'future demand', 'demand trend']
+CUSTOMER_WORDS = ['customer', 'buyer', 'client']
+PRODUCT_WORDS = ['product', 'item', 'category', 'inventory']
+
+FOLLOWUP_SUGGESTIONS = {
+    'delay': ["Which states have the most delays?", "Show delay severity breakdown"],
+    'revenue': ["Which month had the highest revenue?", "Show revenue by state"],
+    'forecast': ["Forecast revenue for 60 days", "Forecast delay rate for next 30 days"],
+    'customer': ["What is the repeat customer rate?", "Show customer lifetime value"],
+    'product': ["What are the top 10 products?", "Show top 5 categories"],
+    'default': ["Give me a comprehensive report", "What insights can you share?"],
+}
+
+
+def _followups_for(user_message: str) -> list:
+    """Heuristic contextual follow-up questions based on the topic of a message"""
+    msg_lower = user_message.lower()
+    if any(w in msg_lower for w in DELAY_WORDS):
+        return FOLLOWUP_SUGGESTIONS['delay']
+    if any(w in msg_lower for w in REVENUE_WORDS):
+        return FOLLOWUP_SUGGESTIONS['revenue']
+    if any(w in msg_lower for w in FORECAST_WORDS):
+        return FOLLOWUP_SUGGESTIONS['forecast']
+    if any(w in msg_lower for w in CUSTOMER_WORDS):
+        return FOLLOWUP_SUGGESTIONS['customer']
+    if any(w in msg_lower for w in PRODUCT_WORDS):
+        return FOLLOWUP_SUGGESTIONS['product']
+    return FOLLOWUP_SUGGESTIONS['default']
 
 
 def run_ui(app):
@@ -1085,15 +1195,17 @@ def run_ui(app):
         .logout-btn button { font-size: 0.82rem !important; padding: 7px 12px !important; }
         """
 
-        def chat_with_mode(message, history, mode, rag_config="with_rag"):
-            """Handle chat with mode switching"""
+        def chat_with_mode_stream(message, mode, rag_config="with_rag"):
+            """Yield the bot's response incrementally as it becomes available"""
             if mode == "agentic" and not app.orchestrator:
-                return "**Agentic mode not initialized.** The multi-agent orchestrator requires initialization at startup."
-            elif mode == "enhanced" and not app.enhanced_chatbot:
-                return "**Enhanced mode not initialized.** The LLM-powered chatbot is not available."
+                yield "**Agentic mode not initialized.** The multi-agent orchestrator requires initialization at startup."
+                return
+            if mode == "enhanced" and not app.enhanced_chatbot:
+                yield "**Enhanced mode not initialized.** The LLM-powered chatbot is not available."
+                return
 
             use_rag = (rag_config == "with_rag") if mode == "enhanced" else True
-            return app.query(message, mode=mode, use_rag=use_rag)
+            yield from app.query_stream(message, mode=mode, use_rag=use_rag)
 
         # Document upload handler
         def upload_document(file, doc_type, description):
@@ -1374,7 +1486,8 @@ def run_ui(app):
                                 height=520,
                                 label="Conversation",
                                 placeholder="Ask about delivery delays, revenue analytics, demand forecasting, or upload policy documents.",
-                                elem_classes=["chatbot-container"]
+                                elem_classes=["chatbot-container"],
+                                buttons=["copy", "copy_all"]
                             )
                             with gr.Row():
                                 msg = gr.Textbox(
@@ -1391,6 +1504,32 @@ def run_ui(app):
                                     variant="primary",
                                     size="lg"
                                 )
+                                stop_btn = gr.Button(
+                                    "Stop",
+                                    scale=1,
+                                    variant="stop",
+                                    size="lg",
+                                    visible=False
+                                )
+                            with gr.Row():
+                                regenerate_btn = gr.Button(
+                                    "🔄 Regenerate response",
+                                    size="sm",
+                                    variant="secondary"
+                                )
+                                new_chat_btn = gr.Button(
+                                    "🗑️ New Chat",
+                                    size="sm",
+                                    variant="secondary"
+                                )
+                                export_btn = gr.DownloadButton(
+                                    "📥 Export Chat",
+                                    size="sm",
+                                    variant="secondary"
+                                )
+                            with gr.Row():
+                                followup_btn_1 = gr.Button(visible=False, size="sm", variant="secondary")
+                                followup_btn_2 = gr.Button(visible=False, size="sm", variant="secondary")
 
                         # Sidebar
                         with gr.Column(scale=1, min_width=280):
@@ -1630,26 +1769,134 @@ def run_ui(app):
                     refresh_metrics_btn.click(show_performance_metrics, inputs=metrics_window, outputs=metrics_output)
 
             # ── Chat event handlers ──
-            def respond(message, chat_history, mode, rag_config):
-                if not message.strip():
-                    return "", chat_history
-                bot_message = chat_with_mode(message, chat_history, mode, rag_config)
-                chat_history.append({"role": "user", "content": message})
-                chat_history.append({"role": "assistant", "content": bot_message})
+            def _last_user_index(chat_history):
+                """Index of the most recent user turn, or None if there isn't one"""
+                for i in range(len(chat_history) - 1, -1, -1):
+                    if chat_history[i].get("role") == "user":
+                        return i
+                return None
 
-                # Generate charts for delay analysis queries
-                msg_lower = message.lower()
-                delay_words = ['delay', 'delivery', 'on-time', 'on time', 'late', 'delayed', 'overdue']
-                analysis_words = ['statistic', 'analyze', 'analysis', 'show', 'overview',
-                                  'performance', 'report', 'chart', 'graph', 'visual', 'dashboard']
-                has_delay = any(w in msg_lower for w in delay_words)
-                has_analysis = any(w in msg_lower for w in analysis_words)
-                if has_delay and has_analysis and app.analytics:
-                    chart_paths = generate_delay_charts(app)
+            def _stream_turn(chat_history, user_message, mode, rag_config):
+                """Append a streamed assistant answer (plus any charts) to chat_history
+                in place, yielding chat_history after every incremental update. Shared
+                by respond() (new message) and regenerate() (re-run last message)."""
+                chat_history.append({"role": "assistant", "content": ""})
+                yield chat_history
+
+                for chunk in chat_with_mode_stream(user_message, mode, rag_config):
+                    chat_history[-1]["content"] += chunk
+                    yield chat_history
+
+                # Generate inline charts when the question calls for one
+                msg_lower = user_message.lower()
+                has_analysis = any(w in msg_lower for w in ANALYSIS_WORDS)
+                has_delay = any(w in msg_lower for w in DELAY_WORDS)
+                has_revenue = any(w in msg_lower for w in REVENUE_WORDS)
+                has_forecast = any(w in msg_lower for w in FORECAST_WORDS)
+
+                chart_paths = []
+                if app.analytics:
+                    if has_delay and has_analysis:
+                        chart_paths = generate_delay_charts(app)
+                    elif has_revenue and has_analysis:
+                        chart_paths = generate_revenue_charts(app)
+                    elif has_forecast:
+                        chart_paths = generate_forecast_charts(app)
+
+                if chart_paths:
                     for path in chart_paths:
                         chat_history.append({"role": "assistant", "content": {"path": path}})
+                    yield chat_history
 
-                return "", chat_history
+            def respond(message, chat_history, mode, rag_config):
+                if not message.strip():
+                    yield "", chat_history
+                    return
+
+                chat_history.append({"role": "user", "content": message})
+                for updated_history in _stream_turn(chat_history, message, mode, rag_config):
+                    yield "", updated_history
+
+            def regenerate(chat_history, mode, rag_config):
+                """Drop the last assistant answer and re-run the last user message"""
+                idx = _last_user_index(chat_history)
+                if idx is None:
+                    yield chat_history
+                    return
+
+                last_message = chat_history[idx]["content"]
+                chat_history = chat_history[:idx + 1]
+                yield from _stream_turn(chat_history, last_message, mode, rag_config)
+
+            def show_followups(chat_history):
+                """Populate the follow-up chips with suggestions related to the last turn"""
+                idx = _last_user_index(chat_history)
+                if idx is None:
+                    return [gr.update(visible=False), gr.update(visible=False)]
+
+                suggestions = _followups_for(chat_history[idx]["content"])
+                return [gr.update(value=s, visible=True) for s in suggestions]
+
+            def send_followup(suggestion):
+                """A follow-up chip's own label becomes the message to send"""
+                return suggestion
+
+            def export_chat(chat_history):
+                """Render the conversation as Markdown and hand back a file to download"""
+                lines = [
+                    "# SCM Chatbot Conversation",
+                    f"_Exported {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}_",
+                    ""
+                ]
+                if not chat_history:
+                    lines.append("_No messages yet._")
+                for entry in chat_history:
+                    role = entry.get("role", "assistant")
+                    content = entry.get("content", "")
+                    speaker = "**You**" if role == "user" else "**Assistant**"
+                    if isinstance(content, dict) and "path" in content:
+                        lines.append(f"{speaker}: _[chart: {os.path.basename(content['path'])}]_\n")
+                    else:
+                        lines.append(f"{speaker}:\n\n{content}\n")
+
+                path = os.path.join(tempfile.gettempdir(), f"scm_chat_export_{int(time.time())}.md")
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write("\n".join(lines))
+                return path
+
+            def new_chat():
+                """Clear the visible conversation and the backends' own memory of it"""
+                if app.enhanced_chatbot:
+                    app.enhanced_chatbot.clear_history()
+                if app.orchestrator:
+                    app.orchestrator.clear_history()
+                return []
+
+            def handle_feedback(chat_history, like_data: gr.LikeData):
+                """Record a thumbs up/down on an assistant message via metrics_tracker"""
+                try:
+                    idx = like_data.index
+                    if isinstance(idx, (tuple, list)):
+                        idx = idx[0]
+
+                    response_text = like_data.value
+                    if not isinstance(response_text, str):
+                        response_text = str(response_text)
+
+                    user_query = ""
+                    for i in range(idx - 1, -1, -1):
+                        if chat_history[i].get("role") == "user":
+                            user_query = chat_history[i]["content"]
+                            break
+
+                    from metrics_tracker import get_metrics_tracker
+                    get_metrics_tracker().record_feedback(
+                        query=user_query,
+                        response=response_text,
+                        liked=bool(like_data.liked)
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to record feedback: {e}")
 
             def update_mode_sections(mode):
                 if mode == "agentic":
@@ -1679,8 +1926,61 @@ def run_ui(app):
                         gr.update(visible=True)
                     ]
 
-            msg.submit(respond, [msg, chatbot, mode_selector, rag_selector], [msg, chatbot])
-            submit_btn.click(respond, [msg, chatbot, mode_selector, rag_selector], [msg, chatbot])
+            def _generating_state():
+                """Swap Send -> Stop while a response is being generated"""
+                return gr.update(visible=False), gr.update(visible=True)
+
+            def _idle_state():
+                """Swap Stop -> Send once generation finishes (or is cancelled)"""
+                return gr.update(visible=True), gr.update(visible=False)
+
+            followup_btns = [followup_btn_1, followup_btn_2]
+
+            msg_event = (
+                msg.submit(_generating_state, None, [submit_btn, stop_btn], queue=False)
+                .then(respond, [msg, chatbot, mode_selector, rag_selector], [msg, chatbot])
+                .then(_idle_state, None, [submit_btn, stop_btn], queue=False)
+                .then(show_followups, [chatbot], followup_btns)
+            )
+            submit_event = (
+                submit_btn.click(_generating_state, None, [submit_btn, stop_btn], queue=False)
+                .then(respond, [msg, chatbot, mode_selector, rag_selector], [msg, chatbot])
+                .then(_idle_state, None, [submit_btn, stop_btn], queue=False)
+                .then(show_followups, [chatbot], followup_btns)
+            )
+            regenerate_event = (
+                regenerate_btn.click(_generating_state, None, [submit_btn, stop_btn], queue=False)
+                .then(regenerate, [chatbot, mode_selector, rag_selector], [chatbot])
+                .then(_idle_state, None, [submit_btn, stop_btn], queue=False)
+                .then(show_followups, [chatbot], followup_btns)
+            )
+            followup_events = [
+                followup_btn.click(send_followup, [followup_btn], [msg], queue=False)
+                .then(_generating_state, None, [submit_btn, stop_btn], queue=False)
+                .then(respond, [msg, chatbot, mode_selector, rag_selector], [msg, chatbot])
+                .then(_idle_state, None, [submit_btn, stop_btn], queue=False)
+                .then(show_followups, [chatbot], followup_btns)
+                for followup_btn in followup_btns
+            ]
+            all_turn_events = [msg_event, submit_event, regenerate_event] + followup_events
+            stop_btn.click(
+                _idle_state,
+                None,
+                [submit_btn, stop_btn],
+                cancels=all_turn_events,
+                queue=False
+            )
+            new_chat_btn.click(
+                new_chat,
+                None,
+                [chatbot],
+                cancels=all_turn_events
+            ).then(
+                lambda: (gr.update(visible=False), gr.update(visible=False)),
+                None, followup_btns, queue=False
+            ).then(_idle_state, None, [submit_btn, stop_btn], queue=False)
+            chatbot.like(handle_feedback, [chatbot], None)
+            export_btn.click(export_chat, [chatbot], [export_btn])
             mode_selector.change(update_mode_sections, inputs=mode_selector, outputs=[agents_section, rag_selector])
 
             # ── Auth: read signed token from URL on page load ──

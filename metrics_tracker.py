@@ -22,6 +22,7 @@ class MetricsTracker:
         """
         self.max_history = max_history
         self.metrics_history = deque(maxlen=max_history)
+        self.feedback_history = deque(maxlen=max_history)
         self.active_queries = {}  # query_id -> start_time and metadata
         logger.info("Metrics Tracker initialized")
 
@@ -188,6 +189,42 @@ class MetricsTracker:
         self.metrics_history.clear()
         logger.info("Metrics history cleared")
 
+    def record_feedback(self, query: str, response: str, liked: bool):
+        """
+        Record explicit user feedback (thumbs up/down) on a response
+
+        Args:
+            query: The user question the feedback applies to
+            response: The assistant response the feedback applies to
+            liked: True for thumbs up, False for thumbs down
+        """
+        self.feedback_history.append({
+            'query': query,
+            'response': response,
+            'liked': liked,
+            'timestamp': time.time()
+        })
+        logger.info(f"Feedback recorded: {'up' if liked else 'down'} for query: {query[:50]}")
+
+    def get_feedback_summary(self) -> Dict[str, Any]:
+        """
+        Summarize collected thumbs up/down feedback
+
+        Returns:
+            Dictionary with feedback counts and like rate
+        """
+        total = len(self.feedback_history)
+        if total == 0:
+            return {'total_feedback': 0, 'likes': 0, 'dislikes': 0, 'like_rate': 0}
+
+        likes = sum(1 for f in self.feedback_history if f['liked'])
+        return {
+            'total_feedback': total,
+            'likes': likes,
+            'dislikes': total - likes,
+            'like_rate': (likes / total) * 100
+        }
+
     def format_comparison_display(self, window: int = 50) -> str:
         """
         Format performance comparison display for UI
@@ -277,6 +314,18 @@ No queries recorded yet. Run some queries to see performance metrics.
             output += f"{i}. {mode_icon} {success_icon} **{query_text}** - {metric['latency_ms']:.0f}ms {rag_icon}\n"
 
         output += f"\n*Showing last 10 of {len(recent)} queries*\n"
+
+        feedback = self.get_feedback_summary()
+        if feedback['total_feedback'] > 0:
+            output += f"""
+---
+
+### User Feedback
+- **Total Feedback:** {feedback['total_feedback']}
+- **👍 Likes:** {feedback['likes']}
+- **👎 Dislikes:** {feedback['dislikes']}
+- **Like Rate:** {feedback['like_rate']:.1f}%
+"""
 
         return output
 

@@ -504,9 +504,15 @@ class SCMChatbotApp:
         logger.info("✅ Setup complete!")
         return True
     
-    def query(self, user_input: str, mode: str = None, use_rag: bool = True) -> str:
+    def query_stream(self, user_input: str, mode: str = None, use_rag: bool = True):
         """
-        Process query with optional mode specification.
+        Process query with optional mode specification, yielding response text
+        incrementally as it becomes available.
+
+        Enhanced mode streams token-by-token (via enhanced_chatbot.query_stream).
+        Agentic mode has no incremental output to stream — the orchestrator must
+        finish running its tools/agents before an answer exists — so it yields
+        its full answer in one piece.
 
         Args:
             user_input: The user's query string
@@ -514,36 +520,33 @@ class SCMChatbotApp:
                   If None, uses priority-based routing.
             use_rag: Whether to use RAG (only applies to enhanced mode)
 
-        Returns:
-            Response string
+        Yields:
+            Response text chunks
         """
         try:
-            # Mode-based routing if mode is specified
-            if mode:
-                if mode == 'agentic':
-                    if self.orchestrator:
-                        return self.orchestrator.query(user_input, show_agent=self.show_agent)
-                    else:
-                        return "⚠️ Agentic mode not available. Orchestrator not initialized."
-                elif mode == 'enhanced':
-                    if self.enhanced_chatbot:
-                        return self.enhanced_chatbot.query(user_input, show_agent=self.show_agent, use_rag=use_rag)
-                    else:
-                        return "⚠️ Enhanced mode not available. Enhanced chatbot not initialized."
+            # Mode-based routing if mode is specified; otherwise priority-based
+            # routing (orchestrator first, then enhanced chatbot).
+            target_mode = mode or ('agentic' if self.orchestrator else 'enhanced' if self.enhanced_chatbot else None)
+
+            if target_mode == 'agentic':
+                if self.orchestrator:
+                    yield self.orchestrator.query(user_input, show_agent=self.show_agent)
                 else:
-                    return f"⚠️ Unknown mode: {mode}. Valid modes: 'agentic', 'enhanced'"
+                    yield "⚠️ Agentic mode not available. Orchestrator not initialized."
+                return
 
-            # Priority-based routing (existing behavior)
-            # Use orchestrator if available (priority)
-            if self.orchestrator:
-                return self.orchestrator.query(user_input, show_agent=self.show_agent)
+            if target_mode == 'enhanced':
+                if self.enhanced_chatbot:
+                    yield from self.enhanced_chatbot.query_stream(user_input, show_agent=self.show_agent, use_rag=use_rag)
+                else:
+                    yield "⚠️ Enhanced mode not available. Enhanced chatbot not initialized."
+                return
 
-            # Use enhanced chatbot if available
-            if self.enhanced_chatbot:
-                return self.enhanced_chatbot.query(user_input, show_agent=self.show_agent)
+            if mode:
+                yield f"⚠️ Unknown mode: {mode}. Valid modes: 'agentic', 'enhanced'"
+                return
 
-            # No mode available
-            return """⚠️ No query processing mode available.
+            yield """⚠️ No query processing mode available.
 
 Please ensure either:
 - **Agentic Mode** (Multi-Agent System) is initialized
@@ -555,7 +558,17 @@ Check your API keys and system configuration."""
             logger.error(f"Query error: {e}")
             import traceback
             traceback.print_exc()
-            return f"❌ Error: {str(e)}"
+            yield f"❌ Error: {str(e)}"
+
+    def query(self, user_input: str, mode: str = None, use_rag: bool = True) -> str:
+        """
+        Process query with optional mode specification (non-streamed convenience
+        wrapper around query_stream, kept for CLI/test callers).
+
+        Returns:
+            Response string
+        """
+        return "".join(self.query_stream(user_input, mode=mode, use_rag=use_rag))
 
 
     def run_cli(self):

@@ -324,54 +324,58 @@ class EnhancedSCMChatbot:
             logger.error(f"Error retrieving context: {e}")
             return ""
 
-    def generate_llm_response(self, query: str, context: str, analytics_data: Dict, intent: Dict) -> str:
-        """Generate response using LLM"""
-        if not self.use_llm or not self.llm_client:
-            return None
+    def _build_answer_prompt(self, query: str, context: str, analytics_data: Dict, intent: Dict) -> tuple:
+        """Build the (system_prompt, user_prompt) pair shared by streaming and non-streaming LLM calls"""
+        # Convert analytics data to JSON-serializable format
+        serializable_data = convert_to_serializable(analytics_data)
 
-        try:
-            # Convert analytics data to JSON-serializable format
-            serializable_data = convert_to_serializable(analytics_data)
+        # Get complexity level
+        complexity = intent.get('complexity', 'moderate')
 
-            # Get complexity level
-            complexity = intent.get('complexity', 'moderate')
+        # Simplify analytics data for simple questions (only include relevant parts)
+        if complexity == 'simple':
+            # Extract only the key metric being asked about
+            serializable_data = self._extract_key_metric(serializable_data, intent, query)
 
-            # Simplify analytics data for simple questions (only include relevant parts)
-            if complexity == 'simple':
-                # Extract only the key metric being asked about
-                serializable_data = self._extract_key_metric(serializable_data, intent, query)
+        # Format analytics data for prompt
+        analytics_summary = json.dumps(serializable_data, indent=2, default=str)
 
-            # Format analytics data for prompt
-            analytics_summary = json.dumps(serializable_data, indent=2, default=str)
-
-            # Format RAG context if available
-            context_section = ""
-            if context and len(context.strip()) > 0:
-                context_section = f"""Policy Documents (from knowledge base):
+        # Format RAG context if available
+        context_section = ""
+        if context and len(context.strip()) > 0:
+            context_section = f"""Policy Documents (from knowledge base):
 {context}
 
 ---
 """
 
-            # Add complexity hint to the prompt
-            complexity_hint = {
-                'simple': "\n\nIMPORTANT: This is a SIMPLE question. Provide ONLY the direct answer in 1 sentence. Do NOT add explanations, recommendations, or extra details.",
-                'moderate': "\n\nThis is a MODERATE question. Provide a brief answer with 2-4 key metrics.",
-                'complex': "\n\nThis is a COMPLEX question. Provide comprehensive analysis with insights and recommendations."
-            }
+        # Add complexity hint to the prompt
+        complexity_hint = {
+            'simple': "\n\nIMPORTANT: This is a SIMPLE question. Provide ONLY the direct answer in 1 sentence. Do NOT add explanations, recommendations, or extra details.",
+            'moderate': "\n\nThis is a MODERATE question. Provide a brief answer with 2-4 key metrics.",
+            'complex': "\n\nThis is a COMPLEX question. Provide comprehensive analysis with insights and recommendations."
+        }
 
-            # Create prompt
-            user_prompt = self.templates.ANSWER_WITH_CONTEXT.format(
-                context_section=context_section,
-                analytics_data=analytics_summary,
-                query=query
-            ) + complexity_hint.get(complexity, '')
+        user_prompt = self.templates.ANSWER_WITH_CONTEXT.format(
+            context_section=context_section,
+            analytics_data=analytics_summary,
+            query=query
+        ) + complexity_hint.get(complexity, '')
 
-            # Call LLM
+        return self.templates.SYSTEM_PROMPT, user_prompt
+
+    def generate_llm_response(self, query: str, context: str, analytics_data: Dict, intent: Dict) -> str:
+        """Generate response using LLM (single, non-streamed call)"""
+        if not self.use_llm or not self.llm_client:
+            return None
+
+        try:
+            system_prompt, user_prompt = self._build_answer_prompt(query, context, analytics_data, intent)
+
             response = self.llm_client.chat.completions.create(
                 model="llama-3.3-70b-versatile",  # Current Groq model (updated 2026)
                 messages=[
-                    {"role": "system", "content": self.templates.SYSTEM_PROMPT},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
                 temperature=0.3,  # Lower temperature for more factual responses
@@ -383,6 +387,33 @@ class EnhancedSCMChatbot:
         except Exception as e:
             logger.error(f"Error generating LLM response: {e}")
             return None
+
+    def generate_llm_response_stream(self, query: str, context: str, analytics_data: Dict, intent: Dict):
+        """Generate response using LLM, yielding text deltas as Groq streams them"""
+        if not self.use_llm or not self.llm_client:
+            return
+
+        try:
+            system_prompt, user_prompt = self._build_answer_prompt(query, context, analytics_data, intent)
+
+            stream = self.llm_client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.3,
+                max_tokens=1024,
+                stream=True
+            )
+
+            for chunk in stream:
+                delta = chunk.choices[0].delta.content
+                if delta:
+                    yield delta
+
+        except Exception as e:
+            logger.error(f"Error streaming LLM response: {e}")
 
     def generate_rule_based_response(self, query: str, intent: Dict, analytics_data: Dict) -> str:
         """Generate response using rule-based system (fallback)"""
@@ -554,20 +585,59 @@ I can provide insights on:
 
 What would you like to know?"""
 
-    def query(self, user_query: str, show_agent: bool = True, use_rag: bool = True) -> str:
+    def _generate_fallback_response(self, user_query: str, intent: Dict, analytics_data: Dict, context: str, show_agent: bool) -> tuple:
+        """Build a non-streamed answer when the primary LLM path is unavailable or empty"""
+        rag_used_fallback = False
+        if context and len(context.strip()) > 20 and 'no relevant' not in context.lower() and self.llm_client:
+            try:
+                synth = self.llm_client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[
+                        {"role": "system", "content": (
+                            "You are a supply chain management expert. Using ONLY the provided document excerpts, "
+                            "give a clear, concise answer to the user's question. "
+                            "Use bullet points and bold key terms for readability. "
+                            "If the documents don't fully answer the question, say what you found and note the gap. "
+                            "Do NOT mention document numbers or relevance scores."
+                        )},
+                        {"role": "user", "content": f"Documents:\n{context}\n\nQuestion: {user_query}"}
+                    ],
+                    temperature=0.3,
+                    max_tokens=1024
+                )
+                response_text = synth.choices[0].message.content
+                rag_used_fallback = True
+            except Exception as e:
+                logger.warning(f"RAG synthesis failed in rule-based fallback: {e}")
+                response_text = self.generate_rule_based_response(user_query, intent, analytics_data)
+        else:
+            response_text = self.generate_rule_based_response(user_query, intent, analytics_data)
+
+        agent_info = ""
+        if show_agent:
+            agent_info = self._build_agent_info(
+                agent="Rule-Based Engine" + (" + RAG" if rag_used_fallback else ""),
+                model="Pattern Matching",
+                complexity=intent.get('complexity', 'moderate'),
+                rag_used=rag_used_fallback
+            )
+        return response_text, agent_info, rag_used_fallback
+
+    def query_stream(self, user_query: str, show_agent: bool = True, use_rag: bool = True):
         """
-        Process user query and generate response
+        Process user query, yielding response text incrementally as it becomes
+        available. The primary LLM path streams token-by-token (Groq); the
+        rule-based/RAG-synthesis fallback path yields its answer in one piece
+        since it has no incremental output to stream.
 
         Args:
             user_query: User's question
             show_agent: Whether to show agent info in response
             use_rag: Whether to use RAG for context retrieval (default: True)
 
-        Returns:
-            Response string
+        Yields:
+            Response text chunks
         """
-        # Track metrics for enhanced mode
-        import time as _time
         _metrics_tracker = None
         _query_id = None
         try:
@@ -581,108 +651,63 @@ What would you like to know?"""
         try:
             logger.info(f"Processing query: {user_query} (use_rag={use_rag})")
 
-            # Analyze query intent
             intent = self.analyze_query_intent(user_query)
             logger.info(f"Query intent: {intent}")
 
-            # Gather analytics data
             analytics_data = self.gather_analytics_data(intent)
 
-            # Retrieve context using RAG if enabled and available
             context = self.retrieve_context(user_query) if (self.rag and use_rag) else ""
             if not use_rag:
                 logger.info("RAG disabled for this query (user preference)")
 
-            agent_info = ""
-            response_text = ""
+            def _record_metrics(response_text: str):
+                if _metrics_tracker and _query_id:
+                    rag_actually_used = bool(context and self.rag and use_rag)
+                    if rag_actually_used:
+                        _metrics_tracker.add_data_source(_query_id, 'rag_documents')
+                    _metrics_tracker.add_agent_execution(_query_id, 'enhanced', used_rag=rag_actually_used)
+                    _metrics_tracker.calculate_hallucination_score(_query_id, response_text, ground_truth_data={'analytics': True})
+                    _metrics_tracker.end_query(_query_id, success=True)
 
-            # Try LLM response first
+            # Try LLM response first (streamed)
             if self.use_llm:
-                llm_response = self.generate_llm_response(user_query, context, analytics_data, intent)
-                if llm_response:
-                    response_text = llm_response
+                chunks = []
+                for delta in self.generate_llm_response_stream(user_query, context, analytics_data, intent):
+                    chunks.append(delta)
+                    yield delta
+                response_text = "".join(chunks)
 
-                    # Build agent info
+                if response_text:
                     if show_agent:
-                        agent_info = self._build_agent_info(
+                        yield self._build_agent_info(
                             agent="Enhanced AI (LLM)",
                             model="Llama 3.3 70B",
                             complexity=intent.get('complexity', 'moderate'),
                             rag_used=bool(context and self.rag)
                         )
 
-                    # Add to conversation history
                     self.conversation_history.append({
                         'query': user_query,
                         'response': response_text,
                         'intent': intent,
                         'agent': 'llm'
                     })
+                    _record_metrics(response_text)
+                    return
 
-                    if _metrics_tracker and _query_id:
-                        rag_actually_used = bool(context and self.rag and use_rag)
-                        if rag_actually_used:
-                            _metrics_tracker.add_data_source(_query_id, 'rag_documents')
-                        _metrics_tracker.add_agent_execution(_query_id, 'enhanced', used_rag=rag_actually_used)
-                        _metrics_tracker.calculate_hallucination_score(_query_id, response_text, ground_truth_data={'analytics': True})
-                        _metrics_tracker.end_query(_query_id, success=True)
+            # Fallback to rule-based / RAG-synthesis response (not streamed)
+            response_text, agent_info, _ = self._generate_fallback_response(
+                user_query, intent, analytics_data, context, show_agent
+            )
+            yield response_text + agent_info
 
-                    return response_text + agent_info
-
-            # Fallback to rule-based response
-            # If RAG context is available, synthesize it via LLM for conceptual questions
-            rag_used_fallback = False
-            if context and len(context.strip()) > 20 and 'no relevant' not in context.lower() and self.llm_client:
-                try:
-                    synth = self.llm_client.chat.completions.create(
-                        model="llama-3.3-70b-versatile",
-                        messages=[
-                            {"role": "system", "content": (
-                                "You are a supply chain management expert. Using ONLY the provided document excerpts, "
-                                "give a clear, concise answer to the user's question. "
-                                "Use bullet points and bold key terms for readability. "
-                                "If the documents don't fully answer the question, say what you found and note the gap. "
-                                "Do NOT mention document numbers or relevance scores."
-                            )},
-                            {"role": "user", "content": f"Documents:\n{context}\n\nQuestion: {user_query}"}
-                        ],
-                        temperature=0.3,
-                        max_tokens=1024
-                    )
-                    response_text = synth.choices[0].message.content
-                    rag_used_fallback = True
-                except Exception as e:
-                    logger.warning(f"RAG synthesis failed in rule-based fallback: {e}")
-                    response_text = self.generate_rule_based_response(user_query, intent, analytics_data)
-            else:
-                response_text = self.generate_rule_based_response(user_query, intent, analytics_data)
-
-            # Build agent info
-            if show_agent:
-                agent_info = self._build_agent_info(
-                    agent="Rule-Based Engine" + (" + RAG" if rag_used_fallback else ""),
-                    model="Pattern Matching",
-                    complexity=intent.get('complexity', 'moderate'),
-                    rag_used=rag_used_fallback
-                )
-
-            # Add to conversation history
             self.conversation_history.append({
                 'query': user_query,
                 'response': response_text,
                 'intent': intent,
                 'agent': 'rule-based'
             })
-
-            if _metrics_tracker and _query_id:
-                rag_actually_used = bool(context and self.rag and use_rag)
-                if rag_actually_used:
-                    _metrics_tracker.add_data_source(_query_id, 'rag_documents')
-                _metrics_tracker.add_agent_execution(_query_id, 'enhanced', used_rag=rag_actually_used)
-                _metrics_tracker.calculate_hallucination_score(_query_id, response_text, ground_truth_data={'analytics': True})
-                _metrics_tracker.end_query(_query_id, success=True)
-
-            return response_text + agent_info
+            _record_metrics(response_text)
 
         except Exception as e:
             logger.error(f"Error processing query: {e}")
@@ -690,7 +715,17 @@ What would you like to know?"""
             traceback.print_exc()
             if _metrics_tracker and _query_id:
                 _metrics_tracker.end_query(_query_id, success=False, error=str(e))
-            return f"❌ Error processing your query: {str(e)}\n\nPlease try rephrasing your question."
+            yield f"❌ Error processing your query: {str(e)}\n\nPlease try rephrasing your question."
+
+    def query(self, user_query: str, show_agent: bool = True, use_rag: bool = True) -> str:
+        """
+        Process user query and generate response (non-streamed convenience wrapper
+        around query_stream, kept for callers that just want the final string).
+
+        Returns:
+            Response string
+        """
+        return "".join(self.query_stream(user_query, show_agent=show_agent, use_rag=use_rag))
 
     def _build_agent_info(self, agent: str, model: str, complexity: str, rag_used: bool) -> str:
         """Build agent execution information footer"""
