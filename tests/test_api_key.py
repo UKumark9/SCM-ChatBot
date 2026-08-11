@@ -1,17 +1,19 @@
 """Test if GROQ_API_KEY is loaded from .env file"""
+
 import os
 import sys
 
 # Force UTF-8 output
-if hasattr(sys.stdout, 'reconfigure'):
-    sys.stdout.reconfigure(encoding='utf-8')
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 
 print("Testing API Key Loading")
-print("="*70)
+print("=" * 70)
 
 # Load .env file
 try:
     from dotenv import load_dotenv
+
     load_dotenv()
     print("[OK] python-dotenv is installed")
 except ImportError:
@@ -19,7 +21,7 @@ except ImportError:
     sys.exit(1)
 
 # Check API key
-api_key = os.getenv('GROQ_API_KEY')
+api_key = os.getenv("GROQ_API_KEY")
 
 if api_key:
     print(f"[OK] GROQ_API_KEY loaded successfully")
@@ -30,18 +32,20 @@ else:
     print("[ERROR] GROQ_API_KEY not found in environment")
     print("     Check that .env file exists with GROQ_API_KEY=your_key")
 
-print("="*70)
+print("=" * 70)
 
 # Now test the chatbot initialization
 print("\nTesting Chatbot with API Key...")
-print("="*70)
+print("=" * 70)
 
 import io
+
 old_stdout = sys.stdout
 sys.stdout = io.StringIO()
 
 try:
-    from main import SCMChatbotApp
+    from scm_chatbot.core.main import SCMChatbotApp
+
     sys.stdout = old_stdout
 
     print("[OK] Chatbot imported successfully")
@@ -51,4 +55,4 @@ except Exception as e:
     sys.stdout = old_stdout
     print(f"[ERROR] Failed to import chatbot: {e}")
 
-print("="*70)
+print("=" * 70)

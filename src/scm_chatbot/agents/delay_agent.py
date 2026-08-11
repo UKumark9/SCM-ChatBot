@@ -6,7 +6,8 @@ Part of the SCM Chatbot Agentic Architecture
 import logging
 from typing import Dict, Any, List
 import pandas as pd
-from ui_formatter import UIFormatter
+from scm_chatbot.ui.ui_formatter import UIFormatter
+from scm_chatbot.llm.guardrails import AGENT_SAFETY_CLAUSE
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +16,7 @@ try:
     from langchain_core.tools import Tool
     from langchain_core.prompts import ChatPromptTemplate
     from langchain.agents import AgentExecutor, create_tool_calling_agent
+
     LANGCHAIN_AVAILABLE = True
 except ImportError:
     LANGCHAIN_AVAILABLE = False
@@ -24,7 +26,13 @@ except ImportError:
 class DelayAgent:
     """Specialized agent for analyzing delivery delays"""
 
-    def __init__(self, analytics_engine, llm_client=None, use_langchain: bool = True, rag_module=None):
+    def __init__(
+        self,
+        analytics_engine,
+        llm_client=None,
+        use_langchain: bool = True,
+        rag_module=None,
+    ):
         """
         Initialize Delay Agent
 
@@ -43,7 +51,9 @@ class DelayAgent:
         if self.use_langchain and llm_client:
             self._initialize_langchain_agent()
 
-        logger.info(f"Delay Agent initialized (LangChain: {self.use_langchain}, RAG: {rag_module is not None})")
+        logger.info(
+            f"Delay Agent initialized (LangChain: {self.use_langchain}, RAG: {rag_module is not None})"
+        )
 
     def _initialize_langchain_agent(self):
         """Initialize LangChain agent with tools"""
@@ -53,28 +63,31 @@ class DelayAgent:
                 Tool(
                     name="GetDelayStatistics",
                     func=self._get_delay_statistics,
-                    description="Get overall delivery delay statistics including delay rate, average delay days, and total delayed orders"
+                    description="Get overall delivery delay statistics including delay rate, average delay days, and total delayed orders",
                 ),
                 Tool(
                     name="GetStateDelays",
                     func=self._get_state_delays,
-                    description="Get delivery delays broken down by state/region"
+                    description="Get delivery delays broken down by state/region",
                 ),
                 Tool(
                     name="GetDelayTrends",
                     func=self._get_delay_trends,
-                    description="Get delay trends over time (monthly or weekly)"
+                    description="Get delay trends over time (monthly or weekly)",
                 ),
                 Tool(
                     name="GetProductDelays",
                     func=self._get_product_delays,
-                    description="Get delivery delays at product or category level. Useful for product-specific delay analysis. Input format: 'product_id:PRODUCT_ID' or 'category:CATEGORY_NAME' or leave empty for all products"
+                    description="Get delivery delays at product or category level. Useful for product-specific delay analysis. Input format: 'product_id:PRODUCT_ID' or 'category:CATEGORY_NAME' or leave empty for all products",
                 ),
             ]
 
             # Create prompt
-            prompt = ChatPromptTemplate.from_messages([
-                ("system", """You are a specialized Delivery Delay Analysis Agent.
+            prompt = ChatPromptTemplate.from_messages(
+                [
+                    (
+                        "system",
+                        """You are a specialized Delivery Delay Analysis Agent.
 Your expertise is in analyzing delivery performance, identifying delay patterns, and providing insights.
 
 CRITICAL: Determine if the user is asking about:
@@ -106,17 +119,17 @@ RESPONSE GUIDELINES:
 - "Analyze delays" → Provide analysis with multiple metrics
 - "What are severity levels?" → Use the document context if provided, otherwise explain you need policy documents
 
-Extract only the relevant information from tool results to answer the specific question."""),
-                ("human", "{input}"),
-            ])
+Extract only the relevant information from tool results to answer the specific question."""
+                        + AGENT_SAFETY_CLAUSE,
+                    ),
+                    ("human", "{input}"),
+                ]
+            )
 
             # Create agent
             agent = create_tool_calling_agent(self.llm_client, tools, prompt)
             self.agent_executor = AgentExecutor(
-                agent=agent,
-                tools=tools,
-                verbose=False,
-                handle_parsing_errors=True
+                agent=agent, tools=tools, verbose=False, handle_parsing_errors=True
             )
 
             logger.info("Delay Agent LangChain executor initialized")
@@ -143,7 +156,7 @@ Extract only the relevant information from tool results to answer the specific q
         """Get delays by state"""
         try:
             result = self.analytics.analyze_delivery_delays()
-            delays_by_state = result.get('delays_by_state', {})
+            delays_by_state = result.get("delays_by_state", {})
 
             if not delays_by_state:
                 return "No state-level delay data available"
@@ -152,7 +165,7 @@ Extract only the relevant information from tool results to answer the specific q
             sorted_states = sorted(
                 [(state, rate * 100) for state, rate in delays_by_state.items()],
                 key=lambda x: x[1],
-                reverse=True
+                reverse=True,
             )
 
             response = "Delays by State (Top 10):\n"
@@ -193,8 +206,18 @@ Extract only the relevant information from tool results to answer the specific q
                 # Natural language parsing
                 else:
                     # Try to extract specific category names from common categories
-                    categories = ['electronics', 'furniture', 'clothing', 'toys', 'books',
-                                 'sports', 'home', 'garden', 'automotive', 'food']
+                    categories = [
+                        "electronics",
+                        "furniture",
+                        "clothing",
+                        "toys",
+                        "books",
+                        "sports",
+                        "home",
+                        "garden",
+                        "automotive",
+                        "food",
+                    ]
                     for cat in categories:
                         if cat in query_lower:
                             category = cat.title()
@@ -204,20 +227,22 @@ Extract only the relevant information from tool results to answer the specific q
                     # If still no match, check for "product X" pattern
                     if not category and not product_id:
                         import re
-                        product_match = re.search(r'product\s+([A-Za-z0-9_-]+)', query_lower)
+
+                        product_match = re.search(
+                            r"product\s+([A-Za-z0-9_-]+)", query_lower
+                        )
                         if product_match:
                             product_id = product_match.group(1)
                             logger.info(f"Detected product_id: {product_id}")
 
             # Get analysis from analytics engine
             result = self.analytics.analyze_product_delays(
-                product_id=product_id,
-                category=category
+                product_id=product_id, category=category
             )
 
             # Check for errors
-            if 'error' in result:
-                return result['error']
+            if "error" in result:
+                return result["error"]
 
             # Format response
             response = f"""Product-Level Delay Analysis ({result['filter']}):
@@ -231,15 +256,15 @@ Extract only the relevant information from tool results to answer the specific q
 - Max Delay: {result['max_delay_days']:.1f} days"""
 
             # Add top delayed products if analyzing all products
-            if 'top_delayed_products' in result:
+            if "top_delayed_products" in result:
                 response += "\n\n🔴 **Top 5 Delayed Products:**\n"
-                for i, product in enumerate(result['top_delayed_products'][:5], 1):
+                for i, product in enumerate(result["top_delayed_products"][:5], 1):
                     response += f"{i}. Product {product['product_id']}: {product['delay_rate']*100:.1f}% delay rate ({product['delayed_count']}/{product['total_count']} orders)\n"
 
             # Add top delayed categories if available
-            if 'top_delayed_categories' in result:
+            if "top_delayed_categories" in result:
                 response += "\n\n**Top 5 Delayed Categories:**\n"
-                for i, cat in enumerate(result['top_delayed_categories'][:5], 1):
+                for i, cat in enumerate(result["top_delayed_categories"][:5], 1):
                     response += f"{i}. {cat['category']}: {cat['delay_rate']*100:.1f}% delay rate ({cat['delayed_count']}/{cat['total_count']} orders)\n"
 
             return response
@@ -261,10 +286,16 @@ Extract only the relevant information from tool results to answer the specific q
         """
         try:
             # Determine if should use RAG based on classification
-            should_use_rag = classification.get('use_rag', True) if classification else True
-            should_use_database = classification.get('use_database', True) if classification else True
+            should_use_rag = (
+                classification.get("use_rag", True) if classification else True
+            )
+            should_use_database = (
+                classification.get("use_database", True) if classification else True
+            )
 
-            logger.info(f"Delay Agent - Use RAG: {should_use_rag} | Use Database: {should_use_database}")
+            logger.info(
+                f"Delay Agent - Use RAG: {should_use_rag} | Use Database: {should_use_database}"
+            )
 
             # Try RAG context retrieval if classification allows it
             rag_context = None
@@ -288,10 +319,10 @@ Extract only the relevant information from tool results to answer the specific q
 
                 response = self.agent_executor.invoke({"input": augmented_query})
                 return {
-                    'response': response['output'],
-                    'agent': 'Delay Agent (LangChain)' + (' + RAG' if used_rag else ''),
-                    'success': True,
-                    'used_rag': used_rag
+                    "response": response["output"],
+                    "agent": "Delay Agent (LangChain)" + (" + RAG" if used_rag else ""),
+                    "success": True,
+                    "used_rag": used_rag,
                 }
 
             # Fallback to rule-based
@@ -299,55 +330,81 @@ Extract only the relevant information from tool results to answer the specific q
                 query_lower = user_query.lower()
 
                 # NEW: If classification says this is a POLICY ONLY question
-                if classification and classification.get('query_type') == 'policy':
+                if classification and classification.get("query_type") == "policy":
                     if used_rag and rag_context and len(rag_context.strip()) > 20:
-                        response = UIFormatter.synthesize_rag_response(user_query, rag_context, self.llm_client)
+                        response = UIFormatter.synthesize_rag_response(
+                            user_query, rag_context, self.llm_client
+                        )
 
                         return {
-                            'response': response,
-                            'agent': 'Delay Agent (Rule-Based) + RAG',
-                            'success': True,
-                            'used_rag': True,
-                            'classification': classification
+                            "response": response,
+                            "agent": "Delay Agent (Rule-Based) + RAG",
+                            "success": True,
+                            "used_rag": True,
+                            "classification": classification,
                         }
                     else:
                         return {
-                            'response': "No policy documents found for this query. Please rephrase or ask a data question.",
-                            'agent': 'Delay Agent (Rule-Based)',
-                            'success': True,
-                            'used_rag': False,
-                            'classification': classification
+                            "response": "No policy documents found for this query. Please rephrase or ask a data question.",
+                            "agent": "Delay Agent (Rule-Based)",
+                            "success": True,
+                            "used_rag": False,
+                            "classification": classification,
                         }
 
                 # NEW: If classification says this is DATA ONLY or default - skip policy check
                 # PRIORITY: Check for product-level DATA queries
-                if 'product' in query_lower or 'category' in query_lower or 'item' in query_lower:
+                if (
+                    "product" in query_lower
+                    or "category" in query_lower
+                    or "item" in query_lower
+                ):
                     response = self._get_product_delays(user_query)
                 # Geographic queries
-                elif 'state' in query_lower or 'where' in query_lower or 'geographic' in query_lower:
+                elif (
+                    "state" in query_lower
+                    or "where" in query_lower
+                    or "geographic" in query_lower
+                ):
                     response = self._get_state_delays()
-                elif 'trend' in query_lower or 'over time' in query_lower:
+                elif "trend" in query_lower or "over time" in query_lower:
                     response = self._get_delay_trends()
                 else:
                     # Get the full statistics for other queries
                     result = self.analytics.analyze_delivery_delays()
 
                     # Specific questions - return only what's asked
-                    if 'what is the delay rate' in query_lower or 'delay rate?' in query_lower:
+                    if (
+                        "what is the delay rate" in query_lower
+                        or "delay rate?" in query_lower
+                    ):
                         response = f"The current delivery delay rate is **{result['delay_rate_percentage']:.2f}%**"
-                    elif 'on-time rate' in query_lower or 'on time rate' in query_lower:
-                        on_time = 100 - result['delay_rate_percentage']
+                    elif "on-time rate" in query_lower or "on time rate" in query_lower:
+                        on_time = 100 - result["delay_rate_percentage"]
                         response = f"The on-time delivery rate is **{on_time:.2f}%**"
-                    elif 'how many delayed' in query_lower or 'number of delayed' in query_lower:
+                    elif (
+                        "how many delayed" in query_lower
+                        or "number of delayed" in query_lower
+                    ):
                         response = f"There are **{result['delayed_orders']:,}** delayed orders out of **{result['total_orders']:,}** total orders"
-                    elif 'average delay' in query_lower or 'mean delay' in query_lower:
+                    elif "average delay" in query_lower or "mean delay" in query_lower:
                         response = f"The average delay duration is **{result['average_delay_days']:.1f} days**"
-                    elif 'maximum delay' in query_lower or 'max delay' in query_lower or 'worst delay' in query_lower:
+                    elif (
+                        "maximum delay" in query_lower
+                        or "max delay" in query_lower
+                        or "worst delay" in query_lower
+                    ):
                         response = f"The maximum delay is **{result['max_delay_days']:.0f} days**"
-                    elif 'median delay' in query_lower:
+                    elif "median delay" in query_lower:
                         response = f"The median delay is **{result['median_delay_days']:.1f} days**"
                     # Comprehensive questions - return full statistics
-                    elif 'statistics' in query_lower or 'show all' in query_lower or 'comprehensive' in query_lower or 'analyze' in query_lower or 'overview' in query_lower:
+                    elif (
+                        "statistics" in query_lower
+                        or "show all" in query_lower
+                        or "comprehensive" in query_lower
+                        or "analyze" in query_lower
+                        or "overview" in query_lower
+                    ):
                         response = self._get_delay_statistics()
                     # Default - give rate and on-time as minimum useful answer
                     else:
@@ -358,26 +415,33 @@ Extract only the relevant information from tool results to answer the specific q
 *Ask for "delay statistics" for more details*"""
 
                 # Append RAG context only if classification allows it (mixed queries)
-                if used_rag and should_use_rag and rag_context and len(rag_context.strip()) > 20 and "no relevant" not in rag_context.lower():
+                if (
+                    used_rag
+                    and should_use_rag
+                    and rag_context
+                    and len(rag_context.strip()) > 20
+                    and "no relevant" not in rag_context.lower()
+                ):
                     # Only append if this is a mixed query (both RAG and database)
-                    if classification and classification.get('query_type') == 'mixed':
+                    if classification and classification.get("query_type") == "mixed":
                         # Use UIFormatter for better RAG context formatting
                         formatted_rag = UIFormatter.format_rag_context(rag_context)
                         response += f"\n\n{formatted_rag}"
 
                 return {
-                    'response': response,
-                    'agent': 'Delay Agent (Rule-Based)' + (' + RAG' if used_rag else ''),
-                    'success': True,
-                    'used_rag': used_rag,
-                    'classification': classification
+                    "response": response,
+                    "agent": "Delay Agent (Rule-Based)"
+                    + (" + RAG" if used_rag else ""),
+                    "success": True,
+                    "used_rag": used_rag,
+                    "classification": classification,
                 }
 
         except Exception as e:
             logger.error(f"Delay Agent error: {e}")
             return {
-                'response': f"Error processing delay query: {e}",
-                'agent': 'Delay Agent',
-                'success': False,
-                'used_rag': False
+                "response": f"Error processing delay query: {e}",
+                "agent": "Delay Agent",
+                "success": False,
+                "used_rag": False,
             }

@@ -1,0 +1,20 @@
+[flake8]
+max-line-length = 127
+# E203 (whitespace before ':') and W503 (line break before binary operator)
+# conflict with black's formatting style - black's own docs recommend ignoring
+# them rather than fighting the formatter. See https://black.readthedocs.io/en/stable/guides/using_black_with_other_tools.html
+extend-ignore = E203, W503
+exclude = venv,__pycache__,.git,build,dist,*.egg-info
+# ui_styles.py is a CSS-in-a-string data module, not logic - long selector
+# lines are normal CSS and splitting them arbitrarily adds risk for no benefit.
+# ui.py embeds long inline HTML/SVG strings (gr.HTML blocks) - wrapping those
+# arbitrarily risks breaking markup for no readability gain.
+# enhanced_chatbot.py's and guardrails.py's long lines are literal LLM
+# prompt text inside triple-quoted strings - a trailing "# noqa" comment
+# would be injected into the prompt itself, so per-file is the only safe
+# suppression here.
+per-file-ignores =
+    src/scm_chatbot/ui/ui_styles.py:E501
+    src/scm_chatbot/ui/ui.py:E501
+    src/scm_chatbot/llm/enhanced_chatbot.py:E501
+    src/scm_chatbot/llm/guardrails.py:E501

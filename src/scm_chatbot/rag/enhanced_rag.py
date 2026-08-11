@@ -10,7 +10,7 @@ from sentence_transformers import CrossEncoder, util
 from rank_bm25 import BM25Okapi
 import re
 
-from rag import VectorDatabase, RAGModule
+from scm_chatbot.rag.rag import VectorDatabase, RAGModule
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +20,11 @@ class EnhancedVectorDatabase(VectorDatabase):
     Enhanced Vector Database with Hybrid Search (Vector + BM25)
     """
 
-    def __init__(self, embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2",
-                 dimension: int = 384):
+    def __init__(
+        self,
+        embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2",
+        dimension: int = 384,
+    ):
         super().__init__(embedding_model_name, dimension)
         self.bm25 = None
         self.tokenized_docs = None
@@ -33,10 +36,7 @@ class EnhancedVectorDatabase(VectorDatabase):
 
         # Build BM25 index for keyword search
         logger.info("Building BM25 index for hybrid search...")
-        self.tokenized_docs = [
-            self._tokenize(doc['text'])
-            for doc in documents
-        ]
+        self.tokenized_docs = [self._tokenize(doc["text"]) for doc in documents]
         self.bm25 = BM25Okapi(self.tokenized_docs)
         logger.info(f"✅ BM25 index built with {len(documents)} documents")
 
@@ -44,10 +44,12 @@ class EnhancedVectorDatabase(VectorDatabase):
         """Simple tokenization for BM25"""
         # Convert to lowercase and split on whitespace/punctuation
         text = text.lower()
-        tokens = re.findall(r'\w+', text)
+        tokens = re.findall(r"\w+", text)
         return tokens
 
-    def hybrid_search(self, query: str, top_k: int = 5, alpha: float = 0.5) -> List[Tuple[Dict, float]]:
+    def hybrid_search(
+        self, query: str, top_k: int = 5, alpha: float = 0.5
+    ) -> List[Tuple[Dict, float]]:
         """
         Hybrid search combining vector and keyword matching
 
@@ -67,7 +69,7 @@ class EnhancedVectorDatabase(VectorDatabase):
         vector_results = self.search(query, top_k=top_k * 4)
         vector_scores = {}
         for doc, distance in vector_results:
-            doc_id = doc['id']
+            doc_id = doc["id"]
             # Convert distance to similarity (0-1 scale)
             similarity = 1 / (1 + distance)
             vector_scores[doc_id] = similarity
@@ -81,7 +83,7 @@ class EnhancedVectorDatabase(VectorDatabase):
         bm25_normalized = {}
         for i, score in enumerate(bm25_scores):
             if i < len(self.documents):
-                doc_id = self.documents[i]['id']
+                doc_id = self.documents[i]["id"]
                 bm25_normalized[doc_id] = score / max_bm25
 
         # 3. Combine scores with weighted average
@@ -96,16 +98,14 @@ class EnhancedVectorDatabase(VectorDatabase):
             hybrid_scores[doc_id] = (alpha * vector_score) + ((1 - alpha) * bm25_score)
 
         # 4. Sort by combined score and return top-k
-        sorted_docs = sorted(
-            hybrid_scores.items(),
-            key=lambda x: x[1],
-            reverse=True
-        )[:top_k]
+        sorted_docs = sorted(hybrid_scores.items(), key=lambda x: x[1], reverse=True)[
+            :top_k
+        ]
 
         # Convert back to (doc, distance) format
         results = []
         for doc_id, score in sorted_docs:
-            doc = next((d for d in self.documents if d['id'] == doc_id), None)
+            doc = next((d for d in self.documents if d["id"] == doc_id), None)
             if doc:
                 # Convert similarity back to distance for consistency
                 distance = (1 / score) - 1 if score > 0 else 999
@@ -121,7 +121,7 @@ class EnhancedVectorDatabase(VectorDatabase):
         # Update BM25 index
         if self.bm25 and new_documents:
             logger.info("Updating BM25 index with new documents...")
-            new_tokenized = [self._tokenize(doc['text']) for doc in new_documents]
+            new_tokenized = [self._tokenize(doc["text"]) for doc in new_documents]
             self.tokenized_docs.extend(new_tokenized)
             # Rebuild BM25 (it's fast enough to rebuild)
             self.bm25 = BM25Okapi(self.tokenized_docs)
@@ -135,8 +135,7 @@ class EnhancedVectorDatabase(VectorDatabase):
         if self.documents:
             logger.info("Rebuilding BM25 index from loaded documents...")
             self.tokenized_docs = [
-                self._tokenize(doc['text'])
-                for doc in self.documents
+                self._tokenize(doc["text"]) for doc in self.documents
             ]
             self.bm25 = BM25Okapi(self.tokenized_docs)
             logger.info(f"✅ BM25 index rebuilt with {len(self.documents)} documents")
@@ -147,11 +146,15 @@ class EnhancedRAGModule(RAGModule):
     Enhanced RAG Module with Re-Ranking and Contextual Compression
     """
 
-    def __init__(self, vector_db: VectorDatabase, top_k: int = 5,
-                 similarity_threshold: float = 2.0,
-                 enable_reranking: bool = True,
-                 enable_compression: bool = True,
-                 rerank_model: str = "cross-encoder/ms-marco-TinyBERT-L-2-v2"):
+    def __init__(
+        self,
+        vector_db: VectorDatabase,
+        top_k: int = 5,
+        similarity_threshold: float = 2.0,
+        enable_reranking: bool = True,
+        enable_compression: bool = True,
+        rerank_model: str = "cross-encoder/ms-marco-TinyBERT-L-2-v2",
+    ):
         """
         Initialize Enhanced RAG Module
 
@@ -181,8 +184,13 @@ class EnhancedRAGModule(RAGModule):
         else:
             self.reranker = None
 
-    def retrieve_context(self, query: str, use_query_expansion: bool = True,
-                        use_hybrid: bool = True, alpha: float = 0.5) -> str:
+    def retrieve_context(
+        self,
+        query: str,
+        use_query_expansion: bool = True,
+        use_hybrid: bool = True,
+        alpha: float = 0.5,
+    ) -> str:
         """
         Enhanced context retrieval with re-ranking and compression
 
@@ -197,6 +205,7 @@ class EnhancedRAGModule(RAGModule):
         """
         try:
             import time
+
             start_time = time.time()
 
             # Step 1: Expand query if enabled (only for complex queries)
@@ -217,13 +226,15 @@ class EnhancedRAGModule(RAGModule):
 
             for q in queries_to_search:
                 # Use hybrid search if available and enabled
-                if use_hybrid and hasattr(self.vector_db, 'hybrid_search'):
-                    results = self.vector_db.hybrid_search(q, top_k=initial_k, alpha=alpha)
+                if use_hybrid and hasattr(self.vector_db, "hybrid_search"):
+                    results = self.vector_db.hybrid_search(
+                        q, top_k=initial_k, alpha=alpha
+                    )
                 else:
                     results = self.vector_db.search(q, initial_k)
 
                 for doc, score in results:
-                    doc_id = doc.get('id', id(doc))
+                    doc_id = doc.get("id", id(doc))
                     # Keep best score for each document
                     if doc_id not in all_results or score < all_results[doc_id][1]:
                         all_results[doc_id] = (doc, score)
@@ -240,16 +251,19 @@ class EnhancedRAGModule(RAGModule):
             logger.debug(f"⏱️  Re-ranking: {time.time() - t3:.2f}s")
 
             # Take top-k after re-ranking
-            results = results[:self.top_k]
+            results = results[: self.top_k]
 
             # Step 4: Filter by similarity threshold
             filtered_results = [
-                (doc, score) for doc, score in results
+                (doc, score)
+                for doc, score in results
                 if score < self.similarity_threshold
             ]
 
             if not filtered_results:
-                logger.warning(f"No results passed threshold {self.similarity_threshold}")
+                logger.warning(
+                    f"No results passed threshold {self.similarity_threshold}"
+                )
                 return "No relevant context found."
 
             # Step 5: Apply contextual compression if enabled
@@ -261,14 +275,18 @@ class EnhancedRAGModule(RAGModule):
             logger.debug(f"⏱️  Compression: {time.time() - t4:.2f}s")
 
             total_time = time.time() - start_time
-            logger.info(f"Retrieved {len(filtered_results)} relevant documents in {total_time:.2f}s")
+            logger.info(
+                f"Retrieved {len(filtered_results)} relevant documents in {total_time:.2f}s"
+            )
             return context
 
         except Exception as e:
             logger.error(f"Error in enhanced retrieval: {e}")
             return "Error retrieving context."
 
-    def _rerank_results(self, query: str, results: List[Tuple[Dict, float]]) -> List[Tuple[Dict, float]]:
+    def _rerank_results(
+        self, query: str, results: List[Tuple[Dict, float]]
+    ) -> List[Tuple[Dict, float]]:
         """
         Re-rank results using cross-encoder
 
@@ -281,16 +299,14 @@ class EnhancedRAGModule(RAGModule):
         """
         try:
             # Prepare query-document pairs
-            pairs = [(query, doc['text']) for doc, _ in results]
+            pairs = [(query, doc["text"]) for doc, _ in results]
 
             # Get re-ranking scores from cross-encoder
             rerank_scores = self.reranker.predict(pairs)
 
             # Combine with original results and sort by re-ranking scores
             reranked = sorted(
-                zip(results, rerank_scores),
-                key=lambda x: x[1],
-                reverse=True
+                zip(results, rerank_scores), key=lambda x: x[1], reverse=True
             )
 
             # Return re-ranked documents with original distance scores
@@ -301,8 +317,9 @@ class EnhancedRAGModule(RAGModule):
             logger.warning(f"Re-ranking failed: {e}, using original order")
             return results
 
-    def _compressed_context(self, query: str, results: List[Tuple[Dict, float]],
-                           sentences_per_doc: int = 2) -> str:
+    def _compressed_context(
+        self, query: str, results: List[Tuple[Dict, float]], sentences_per_doc: int = 2
+    ) -> str:
         """
         Extract only the most relevant sentences from each document
 
@@ -320,13 +337,11 @@ class EnhancedRAGModule(RAGModule):
             for doc, score in results:
                 # Extract relevant sentences
                 compressed_text = self._extract_relevant_sentences(
-                    query,
-                    doc['text'],
-                    top_k=sentences_per_doc
+                    query, doc["text"], top_k=sentences_per_doc
                 )
 
                 similarity = 1 / (1 + score)
-                doc_name = doc.get('metadata', {}).get('doc_name', '')
+                doc_name = doc.get("metadata", {}).get("doc_name", "")
                 source_line = f"[Source: {doc_name}]\n" if doc_name else ""
                 compressed_parts.append(
                     f"{source_line}[Relevance: {similarity:.2f}]\n{compressed_text}\n"
@@ -352,15 +367,19 @@ class EnhancedRAGModule(RAGModule):
         """
         try:
             # Split into sentences (simple approach)
-            sentences = re.split(r'(?<=[.!?])\s+', text)
+            sentences = re.split(r"(?<=[.!?])\s+", text)
             sentences = [s.strip() for s in sentences if len(s.strip()) > 10]
 
             if len(sentences) <= top_k:
                 return text  # Return full text if too few sentences
 
             # Embed query and sentences
-            query_embedding = self.vector_db.embedding_model.encode(query, convert_to_tensor=True)
-            sentence_embeddings = self.vector_db.embedding_model.encode(sentences, convert_to_tensor=True)
+            query_embedding = self.vector_db.embedding_model.encode(
+                query, convert_to_tensor=True
+            )
+            sentence_embeddings = self.vector_db.embedding_model.encode(
+                sentences, convert_to_tensor=True
+            )
 
             # Calculate similarities
             similarities = util.cos_sim(query_embedding, sentence_embeddings)[0]
@@ -373,7 +392,7 @@ class EnhancedRAGModule(RAGModule):
 
             # Combine selected sentences
             relevant_sentences = [sentences[i] for i in top_indices_sorted]
-            return ' '.join(relevant_sentences)
+            return " ".join(relevant_sentences)
 
         except Exception as e:
             logger.warning(f"Sentence extraction failed: {e}")
@@ -384,9 +403,11 @@ class EnhancedRAGModule(RAGModule):
         context_parts = []
         for doc, score in results:
             similarity = 1 / (1 + score)
-            doc_name = doc.get('metadata', {}).get('doc_name', '')
+            doc_name = doc.get("metadata", {}).get("doc_name", "")
             source_line = f"[Source: {doc_name}]\n" if doc_name else ""
-            context_parts.append(f"{source_line}[Relevance: {similarity:.2f}]\n{doc['text']}\n")
+            context_parts.append(
+                f"{source_line}[Relevance: {similarity:.2f}]\n{doc['text']}\n"
+            )
 
         return "\n---\n".join(context_parts)
 
@@ -404,33 +425,41 @@ class EnhancedRAGModule(RAGModule):
         expansions = []
 
         # Pattern 1: Severity/Classification
-        if 'severity' in query_lower or 'level' in query_lower:
-            expansions.extend([
-                query.replace('severity', 'classification'),
-                query.replace('severity levels', 'delay categories'),
-                query.replace('severity', 'priority')
-            ])
+        if "severity" in query_lower or "level" in query_lower:
+            expansions.extend(
+                [
+                    query.replace("severity", "classification"),
+                    query.replace("severity levels", "delay categories"),
+                    query.replace("severity", "priority"),
+                ]
+            )
 
         # Pattern 2: Delay/Late
-        if 'delay' in query_lower:
-            expansions.extend([
-                query.replace('delay', 'late delivery'),
-                query.replace('delay', 'lateness')
-            ])
+        if "delay" in query_lower:
+            expansions.extend(
+                [
+                    query.replace("delay", "late delivery"),
+                    query.replace("delay", "lateness"),
+                ]
+            )
 
         # Pattern 3: Policy/Procedure
-        if 'policy' in query_lower:
-            expansions.extend([
-                query.replace('policy', 'procedure'),
-                query.replace('policy', 'guideline')
-            ])
+        if "policy" in query_lower:
+            expansions.extend(
+                [
+                    query.replace("policy", "procedure"),
+                    query.replace("policy", "guideline"),
+                ]
+            )
 
         # Pattern 4: Process/Steps
-        if 'process' in query_lower:
-            expansions.extend([
-                query.replace('process', 'procedure'),
-                query.replace('process', 'steps')
-            ])
+        if "process" in query_lower:
+            expansions.extend(
+                [
+                    query.replace("process", "procedure"),
+                    query.replace("process", "steps"),
+                ]
+            )
 
         # Remove duplicates and limit
         expansions = list(set(expansions))[:2]
@@ -442,7 +471,7 @@ def create_enhanced_rag_system(
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
     enable_reranking: bool = True,
     enable_compression: bool = True,
-    enable_hybrid: bool = True
+    enable_hybrid: bool = True,
 ) -> Tuple[EnhancedVectorDatabase, EnhancedRAGModule]:
     """
     Create an enhanced RAG system with all improvements
@@ -459,14 +488,10 @@ def create_enhanced_rag_system(
     # Create enhanced vector database
     if enable_hybrid:
         vector_db = EnhancedVectorDatabase(
-            embedding_model_name=embedding_model,
-            dimension=384
+            embedding_model_name=embedding_model, dimension=384
         )
     else:
-        vector_db = VectorDatabase(
-            embedding_model_name=embedding_model,
-            dimension=384
-        )
+        vector_db = VectorDatabase(embedding_model_name=embedding_model, dimension=384)
 
     # Initialize vector database
     vector_db.initialize()
@@ -477,7 +502,7 @@ def create_enhanced_rag_system(
         top_k=5,
         similarity_threshold=2.0,
         enable_reranking=enable_reranking,
-        enable_compression=enable_compression
+        enable_compression=enable_compression,
     )
 
     return vector_db, rag_module

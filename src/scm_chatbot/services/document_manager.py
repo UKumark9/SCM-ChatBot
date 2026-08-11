@@ -22,19 +22,19 @@ def clean_pdf_text(text: str) -> str:
 
     # Replace common PDF encoding artifacts
     replacements = {
-        '(cid:127)': '•',
-        '(cid:129)': '•',
-        '(cid:139)': '‹',
-        '(cid:155)': '›',
-        '(cid:150)': '–',
-        '(cid:151)': '—',
-        '(cid:147)': '"',
-        '(cid:148)': '"',
-        '(cid:145)': ''',
-        '(cid:146)': ''',
-        '\x00': '',
-        '\uf0b7': '•',
-        '\uf0a7': '◦',
+        "(cid:127)": "•",
+        "(cid:129)": "•",
+        "(cid:139)": "‹",
+        "(cid:155)": "›",
+        "(cid:150)": "–",
+        "(cid:151)": "—",
+        "(cid:147)": '"',
+        "(cid:148)": '"',
+        "(cid:145)": """,
+        '(cid:146)': """,
+        "\x00": "",
+        "\uf0b7": "•",
+        "\uf0a7": "◦",
     }
 
     cleaned = text
@@ -43,7 +43,8 @@ def clean_pdf_text(text: str) -> str:
 
     # Remove any remaining (cid:XXX) patterns
     import re
-    cleaned = re.sub(r'\(cid:\d+\)', '•', cleaned)
+
+    cleaned = re.sub(r"\(cid:\d+\)", "•", cleaned)
 
     return cleaned
 
@@ -74,8 +75,9 @@ class DocumentManager:
         """Load documents metadata"""
         if self.metadata_file.exists():
             import json
+
             try:
-                with open(self.metadata_file, 'r') as f:
+                with open(self.metadata_file, "r") as f:
                     return json.load(f)
             except:
                 return {"documents": []}
@@ -84,15 +86,21 @@ class DocumentManager:
     def _save_metadata(self):
         """Save documents metadata"""
         import json
-        with open(self.metadata_file, 'w') as f:
+
+        with open(self.metadata_file, "w") as f:
             json.dump(self.metadata, f, indent=2)
 
     def _get_file_hash(self, file_content: bytes) -> str:
         """Generate hash of file content"""
         return hashlib.md5(file_content).hexdigest()
 
-    def upload_document(self, file_path: str, file_content: bytes,
-                       doc_type: str = "general", description: str = "") -> Dict[str, Any]:
+    def upload_document(
+        self,
+        file_path: str,
+        file_content: bytes,
+        doc_type: str = "general",
+        description: str = "",
+    ) -> Dict[str, Any]:
         """
         Upload a document and optionally vectorize it
 
@@ -111,11 +119,11 @@ class DocumentManager:
             file_ext = Path(file_path).suffix.lower()
 
             # Validate file type
-            supported_types = ['.pdf', '.docx', '.txt', '.md']
+            supported_types = [".pdf", ".docx", ".txt", ".md"]
             if file_ext not in supported_types:
                 return {
-                    'success': False,
-                    'error': f"Unsupported file type. Supported: {', '.join(supported_types)}"
+                    "success": False,
+                    "error": f"Unsupported file type. Supported: {', '.join(supported_types)}",
                 }
 
             # Generate unique filename
@@ -124,17 +132,23 @@ class DocumentManager:
             saved_path = self.docs_path / saved_name
 
             # Check if already uploaded
-            existing = next((doc for doc in self.metadata['documents']
-                           if doc['file_hash'] == file_hash), None)
+            existing = next(
+                (
+                    doc
+                    for doc in self.metadata["documents"]
+                    if doc["file_hash"] == file_hash
+                ),
+                None,
+            )
             if existing:
                 return {
-                    'success': True,
-                    'message': 'Document already exists',
-                    'document': existing
+                    "success": True,
+                    "message": "Document already exists",
+                    "document": existing,
                 }
 
             # Save file
-            with open(saved_path, 'wb') as f:
+            with open(saved_path, "wb") as f:
                 f.write(file_content)
 
             # Extract text
@@ -142,74 +156,77 @@ class DocumentManager:
 
             # Create metadata entry
             doc_metadata = {
-                'id': file_hash,
-                'file_hash': file_hash,
-                'original_name': file_name,
-                'saved_name': saved_name,
-                'file_type': file_ext[1:],  # Remove dot
-                'doc_type': doc_type,
-                'description': description,
-                'upload_date': datetime.now().isoformat(),
-                'size_bytes': len(file_content),
-                'text_length': len(text_content) if text_content else 0,
-                'vectorized': False
+                "id": file_hash,
+                "file_hash": file_hash,
+                "original_name": file_name,
+                "saved_name": saved_name,
+                "file_type": file_ext[1:],  # Remove dot
+                "doc_type": doc_type,
+                "description": description,
+                "upload_date": datetime.now().isoformat(),
+                "size_bytes": len(file_content),
+                "text_length": len(text_content) if text_content else 0,
+                "vectorized": False,
             }
 
             # Vectorize if RAG module available
             if self.rag_module and text_content:
                 try:
-                    self._vectorize_document(doc_metadata['id'], text_content)
-                    doc_metadata['vectorized'] = True
+                    self._vectorize_document(doc_metadata["id"], text_content)
+                    doc_metadata["vectorized"] = True
                     logger.info(f"✅ Vectorized document: {file_name}")
                 except Exception as e:
                     logger.warning(f"Failed to vectorize document: {e}")
 
             # Add to metadata
-            self.metadata['documents'].append(doc_metadata)
+            self.metadata["documents"].append(doc_metadata)
             self._save_metadata()
 
             logger.info(f"✅ Uploaded document: {file_name}")
             return {
-                'success': True,
-                'message': 'Document uploaded successfully',
-                'document': doc_metadata
+                "success": True,
+                "message": "Document uploaded successfully",
+                "document": doc_metadata,
             }
 
         except Exception as e:
             logger.error(f"Error uploading document: {e}")
-            return {
-                'success': False,
-                'error': str(e)
-            }
+            return {"success": False, "error": str(e)}
 
     def _extract_text(self, file_path: Path, file_ext: str) -> Optional[str]:
         """Extract text from document"""
         try:
-            if file_ext == '.txt' or file_ext == '.md':
-                with open(file_path, 'r', encoding='utf-8') as f:
+            if file_ext == ".txt" or file_ext == ".md":
+                with open(file_path, "r", encoding="utf-8") as f:
                     return f.read()
 
-            elif file_ext == '.pdf':
+            elif file_ext == ".pdf":
                 try:
                     import PyPDF2
-                    with open(file_path, 'rb') as f:
+
+                    with open(file_path, "rb") as f:
                         pdf_reader = PyPDF2.PdfReader(f)
                         text = ""
                         for page in pdf_reader.pages:
                             text += page.extract_text() + "\n"
                         return clean_pdf_text(text)
                 except ImportError:
-                    logger.warning("PyPDF2 not installed. Install with: pip install PyPDF2")
+                    logger.warning(
+                        "PyPDF2 not installed. Install with: pip install PyPDF2"
+                    )
                     return None
 
-            elif file_ext == '.docx':
+            elif file_ext == ".docx":
                 try:
                     import docx
+
                     doc = docx.Document(file_path)
                     text = "\n".join([paragraph.text for paragraph in doc.paragraphs])
                     return text
                 except ImportError:
-                    logger.warning("python-docx not installed. Install with: pip install python-docx")
+                    logger.warning(
+                        "python-docx not installed. Install with: pip install python-docx"
+                    )
                     return None
 
         except Exception as e:
@@ -229,7 +246,8 @@ class DocumentManager:
                 return
 
             # Create document chunks
-            from rag import DocumentProcessor
+            from scm_chatbot.rag.rag import DocumentProcessor
+
             processor = DocumentProcessor(chunk_size=500, chunk_overlap=100)
 
             # Get text chunks
@@ -240,27 +258,28 @@ class DocumentManager:
             rag_documents = []
             for chunk_idx, chunk_text in enumerate(text_chunks):
                 rag_doc = {
-                    'id': f"{doc_id}_chunk_{chunk_idx}",
-                    'text': chunk_text,
-                    'type': 'business_document',
-                    'metadata': {
-                        'doc_id': doc_id,
-                        'doc_name': doc_meta['original_name'],
-                        'doc_type': doc_meta['doc_type'],
-                        'chunk_index': chunk_idx,
-                        'total_chunks': len(text_chunks),
-                        'source': 'uploaded_document'
-                    }
+                    "id": f"{doc_id}_chunk_{chunk_idx}",
+                    "text": chunk_text,
+                    "type": "business_document",
+                    "metadata": {
+                        "doc_id": doc_id,
+                        "doc_name": doc_meta["original_name"],
+                        "doc_type": doc_meta["doc_type"],
+                        "chunk_index": chunk_idx,
+                        "total_chunks": len(text_chunks),
+                        "source": "uploaded_document",
+                    },
                 }
                 rag_documents.append(rag_doc)
 
             # Add to vector database (incremental indexing)
-            if hasattr(self.rag_module, 'vector_db'):
+            if hasattr(self.rag_module, "vector_db"):
                 self.rag_module.vector_db.add_documents(rag_documents)
                 logger.info(f"✅ Added {len(rag_documents)} chunks to vector database")
 
                 # Save updated index to disk
                 from pathlib import Path
+
                 vector_index_path = Path("data/vector_index")
                 if vector_index_path.exists():
                     self.rag_module.vector_db.save_index(str(vector_index_path))
@@ -276,19 +295,20 @@ class DocumentManager:
         from concurrent.futures import ThreadPoolExecutor, Future
 
         if not self.rag_module:
-            yield {'stage': 'error', 'error': 'RAG module not initialized'}
+            yield {"stage": "error", "error": "RAG module not initialized"}
             return
 
         all_docs = self.list_documents()
         if not all_docs:
-            yield {'stage': 'error', 'error': 'No documents found'}
+            yield {"stage": "error", "error": "No documents found"}
             return
 
         total = len(all_docs)
-        yield {'stage': 'start', 'total': total}
+        yield {"stage": "start", "total": total}
         time.sleep(0.3)
 
-        from rag import DocumentProcessor
+        from scm_chatbot.rag.rag import DocumentProcessor
+
         processor = DocumentProcessor(chunk_size=500, chunk_overlap=100)
         executor = ThreadPoolExecutor(max_workers=1)
 
@@ -297,22 +317,32 @@ class DocumentManager:
         all_chunks = []
 
         def _extract(doc):
-            file_path = self.docs_path / doc['saved_name']
+            file_path = self.docs_path / doc["saved_name"]
             if not file_path.exists():
-                return None, 'File not found'
-            if doc['file_type'] == 'pdf':
+                return None, "File not found"
+            if doc["file_type"] == "pdf":
                 try:
-                    from vectorize_documents import extract_pdf_text
+                    from scm_chatbot.services.vectorize_documents import (
+                        extract_pdf_text,
+                    )
+
                     return extract_pdf_text(file_path), None
                 except ImportError:
-                    return self._extract_text(file_path, '.pdf'), None
+                    return self._extract_text(file_path, ".pdf"), None
             else:
                 return self._extract_text(file_path, f".{doc['file_type']}"), None
 
         for idx, doc in enumerate(all_docs):
-            doc_name = doc['original_name']
-            yield {'stage': 'extracting', 'current': idx + 1, 'total': total, 'doc_name': doc_name,
-                   'successful': successful, 'failed': failed, 'chunks': len(all_chunks)}
+            doc_name = doc["original_name"]
+            yield {
+                "stage": "extracting",
+                "current": idx + 1,
+                "total": total,
+                "doc_name": doc_name,
+                "successful": successful,
+                "failed": failed,
+                "chunks": len(all_chunks),
+            }
 
             try:
                 future = executor.submit(_extract, doc)
@@ -322,76 +352,137 @@ class DocumentManager:
 
                 if err:
                     failed += 1
-                    yield {'stage': 'doc_failed', 'current': idx + 1, 'total': total, 'doc_name': doc_name,
-                           'reason': err, 'successful': successful, 'failed': failed, 'chunks': len(all_chunks)}
+                    yield {
+                        "stage": "doc_failed",
+                        "current": idx + 1,
+                        "total": total,
+                        "doc_name": doc_name,
+                        "reason": err,
+                        "successful": successful,
+                        "failed": failed,
+                        "chunks": len(all_chunks),
+                    }
                     time.sleep(0.2)
                     continue
 
                 if not text_content or len(text_content.strip()) < 10:
                     failed += 1
-                    yield {'stage': 'doc_failed', 'current': idx + 1, 'total': total, 'doc_name': doc_name,
-                           'reason': 'No text extracted', 'successful': successful, 'failed': failed, 'chunks': len(all_chunks)}
+                    yield {
+                        "stage": "doc_failed",
+                        "current": idx + 1,
+                        "total": total,
+                        "doc_name": doc_name,
+                        "reason": "No text extracted",
+                        "successful": successful,
+                        "failed": failed,
+                        "chunks": len(all_chunks),
+                    }
                     time.sleep(0.2)
                     continue
 
-                yield {'stage': 'chunking', 'current': idx + 1, 'total': total, 'doc_name': doc_name,
-                       'text_length': len(text_content), 'successful': successful, 'failed': failed, 'chunks': len(all_chunks)}
+                yield {
+                    "stage": "chunking",
+                    "current": idx + 1,
+                    "total": total,
+                    "doc_name": doc_name,
+                    "text_length": len(text_content),
+                    "successful": successful,
+                    "failed": failed,
+                    "chunks": len(all_chunks),
+                }
                 time.sleep(0.2)
 
                 chunks = processor.chunk_text(text_content)
                 for chunk_idx, chunk_text in enumerate(chunks):
-                    all_chunks.append({
-                        'id': f"{doc['id']}_chunk_{chunk_idx}",
-                        'text': chunk_text,
-                        'type': 'business_document',
-                        'metadata': {
-                            'doc_id': doc['id'],
-                            'doc_name': doc_name,
-                            'doc_type': doc['doc_type'],
-                            'chunk_index': chunk_idx,
-                            'total_chunks': len(chunks),
-                            'source': 'uploaded_document'
+                    all_chunks.append(
+                        {
+                            "id": f"{doc['id']}_chunk_{chunk_idx}",
+                            "text": chunk_text,
+                            "type": "business_document",
+                            "metadata": {
+                                "doc_id": doc["id"],
+                                "doc_name": doc_name,
+                                "doc_type": doc["doc_type"],
+                                "chunk_index": chunk_idx,
+                                "total_chunks": len(chunks),
+                                "source": "uploaded_document",
+                            },
                         }
-                    })
+                    )
 
-                for m in self.metadata['documents']:
-                    if m['id'] == doc['id']:
-                        m['vectorized'] = True
-                        m['text_length'] = len(text_content)
+                for m in self.metadata["documents"]:
+                    if m["id"] == doc["id"]:
+                        m["vectorized"] = True
+                        m["text_length"] = len(text_content)
                         break
                 successful += 1
 
-                yield {'stage': 'doc_done', 'current': idx + 1, 'total': total, 'doc_name': doc_name,
-                       'doc_chunks': len(chunks), 'successful': successful, 'failed': failed, 'chunks': len(all_chunks)}
+                yield {
+                    "stage": "doc_done",
+                    "current": idx + 1,
+                    "total": total,
+                    "doc_name": doc_name,
+                    "doc_chunks": len(chunks),
+                    "successful": successful,
+                    "failed": failed,
+                    "chunks": len(all_chunks),
+                }
                 time.sleep(0.2)
 
             except Exception as e:
                 logger.error(f"Error processing {doc_name}: {e}")
                 failed += 1
-                yield {'stage': 'doc_failed', 'current': idx + 1, 'total': total, 'doc_name': doc_name,
-                       'reason': str(e), 'successful': successful, 'failed': failed, 'chunks': len(all_chunks)}
+                yield {
+                    "stage": "doc_failed",
+                    "current": idx + 1,
+                    "total": total,
+                    "doc_name": doc_name,
+                    "reason": str(e),
+                    "successful": successful,
+                    "failed": failed,
+                    "chunks": len(all_chunks),
+                }
                 time.sleep(0.2)
 
         executor.shutdown(wait=False)
 
         if not all_chunks:
-            yield {'stage': 'error', 'error': 'No text could be extracted from any document'}
+            yield {
+                "stage": "error",
+                "error": "No text could be extracted from any document",
+            }
             return
 
-        yield {'stage': 'building', 'successful': successful, 'failed': failed, 'chunks': len(all_chunks)}
+        yield {
+            "stage": "building",
+            "successful": successful,
+            "failed": failed,
+            "chunks": len(all_chunks),
+        }
         time.sleep(0.2)
 
         try:
             self.rag_module.vector_db.build_index(all_chunks)
-            yield {'stage': 'saving', 'successful': successful, 'failed': failed, 'chunks': len(all_chunks)}
+            yield {
+                "stage": "saving",
+                "successful": successful,
+                "failed": failed,
+                "chunks": len(all_chunks),
+            }
             time.sleep(0.2)
             self.rag_module.vector_db.save_index("data/vector_index")
             self._save_metadata()
             logger.info(f"Index rebuilt: {successful} docs, {len(all_chunks)} chunks")
-            yield {'stage': 'done', 'total': total, 'successful': successful, 'failed': failed, 'chunks': len(all_chunks)}
+            yield {
+                "stage": "done",
+                "total": total,
+                "successful": successful,
+                "failed": failed,
+                "chunks": len(all_chunks),
+            }
         except Exception as e:
             logger.error(f"Error building index: {e}")
-            yield {'stage': 'error', 'error': str(e)}
+            yield {"stage": "error", "error": str(e)}
 
     def list_documents(self, doc_type: Optional[str] = None) -> List[Dict]:
         """
@@ -403,15 +494,16 @@ class DocumentManager:
         Returns:
             List of document metadata
         """
-        docs = self.metadata['documents']
+        docs = self.metadata["documents"]
         if doc_type:
-            docs = [doc for doc in docs if doc['doc_type'] == doc_type]
+            docs = [doc for doc in docs if doc["doc_type"] == doc_type]
         return docs
 
     def get_document(self, doc_id: str) -> Optional[Dict]:
         """Get document metadata by ID"""
-        return next((doc for doc in self.metadata['documents']
-                    if doc['id'] == doc_id), None)
+        return next(
+            (doc for doc in self.metadata["documents"] if doc["id"] == doc_id), None
+        )
 
     def delete_document(self, doc_id: str) -> bool:
         """
@@ -429,60 +521,66 @@ class DocumentManager:
                 logger.warning(f"Document {doc_id} not found")
                 return False
 
-            doc_name = doc['original_name']
+            doc_name = doc["original_name"]
             logger.info(f"Deleting document: {doc_name}")
 
             # Step 1: Delete physical file
-            file_path = self.docs_path / doc['saved_name']
+            file_path = self.docs_path / doc["saved_name"]
             if file_path.exists():
                 file_path.unlink()
                 logger.info(f"  ✓ Deleted file: {doc['saved_name']}")
 
             # Step 2: Remove from metadata
-            self.metadata['documents'] = [
-                d for d in self.metadata['documents']
-                if d['id'] != doc_id
+            self.metadata["documents"] = [
+                d for d in self.metadata["documents"] if d["id"] != doc_id
             ]
             self._save_metadata()
             logger.info(f"  ✓ Removed from metadata")
 
             # Step 3: Remove chunks from vector index
-            if self.rag_module and hasattr(self.rag_module, 'vector_db'):
+            if self.rag_module and hasattr(self.rag_module, "vector_db"):
                 vector_db = self.rag_module.vector_db
 
                 if vector_db.documents:
                     # Filter out all chunks belonging to this document
                     initial_count = len(vector_db.documents)
                     remaining_docs = [
-                        d for d in vector_db.documents
-                        if d.get('metadata', {}).get('doc_id') != doc_id
+                        d
+                        for d in vector_db.documents
+                        if d.get("metadata", {}).get("doc_id") != doc_id
                     ]
                     removed_count = initial_count - len(remaining_docs)
 
                     if removed_count > 0:
-                        logger.info(f"  ✓ Removing {removed_count} chunks from vector index...")
+                        logger.info(
+                            f"  ✓ Removing {removed_count} chunks from vector index..."
+                        )
 
                         # Rebuild index with remaining documents
                         vector_db.documents = []
-                        if hasattr(vector_db, 'doc_embeddings'):
+                        if hasattr(vector_db, "doc_embeddings"):
                             vector_db.doc_embeddings = None
 
                         # Reinitialize FAISS index
                         import faiss
+
                         vector_db.index = faiss.IndexFlatL2(vector_db.dimension)
 
                         # Rebuild BM25 if enhanced RAG
-                        if hasattr(vector_db, 'bm25'):
+                        if hasattr(vector_db, "bm25"):
                             vector_db.bm25 = None
                             vector_db.tokenized_docs = None
 
                         if remaining_docs:
                             # Rebuild index with remaining documents
                             vector_db.build_index(remaining_docs)
-                            logger.info(f"  ✓ Rebuilt index with {len(remaining_docs)} remaining chunks")
+                            logger.info(
+                                f"  ✓ Rebuilt index with {len(remaining_docs)} remaining chunks"
+                            )
 
                             # Save updated index
                             from pathlib import Path
+
                             vector_index_path = Path("data/vector_index")
                             if vector_index_path.exists():
                                 vector_db.save_index(str(vector_index_path))
@@ -490,7 +588,9 @@ class DocumentManager:
                         else:
                             logger.info(f"  ⚠️  No documents remaining in index")
                     else:
-                        logger.info(f"  ℹ️  No chunks found in vector index for this document")
+                        logger.info(
+                            f"  ℹ️  No chunks found in vector index for this document"
+                        )
 
             logger.info(f"✅ Successfully deleted document: {doc_name}")
             return True
@@ -498,6 +598,7 @@ class DocumentManager:
         except Exception as e:
             logger.error(f"Error deleting document {doc_id}: {e}")
             import traceback
+
             logger.debug(traceback.format_exc())
             return False
 
@@ -516,16 +617,16 @@ class DocumentManager:
             # Fallback to keyword search in metadata
             query_lower = query.lower()
             results = []
-            for doc in self.metadata['documents']:
+            for doc in self.metadata["documents"]:
                 score = 0
-                if query_lower in doc['original_name'].lower():
+                if query_lower in doc["original_name"].lower():
                     score += 2
-                if query_lower in doc.get('description', '').lower():
+                if query_lower in doc.get("description", "").lower():
                     score += 1
                 if score > 0:
-                    results.append({**doc, 'score': score})
+                    results.append({**doc, "score": score})
 
-            results.sort(key=lambda x: x['score'], reverse=True)
+            results.sort(key=lambda x: x["score"], reverse=True)
             return results[:top_k]
 
         # Use RAG vector search
@@ -536,15 +637,17 @@ class DocumentManager:
             results = []
 
             for result in search_results:
-                doc_id = result.get('metadata', {}).get('doc_id')
+                doc_id = result.get("metadata", {}).get("doc_id")
                 if doc_id and doc_id not in doc_ids:
                     doc = self.get_document(doc_id)
                     if doc:
-                        results.append({
-                            **doc,
-                            'relevance_score': result.get('score', 0),
-                            'snippet': result.get('text', '')[:200] + '...'
-                        })
+                        results.append(
+                            {
+                                **doc,
+                                "relevance_score": result.get("score", 0),
+                                "snippet": result.get("text", "")[:200] + "...",
+                            }
+                        )
                         doc_ids.add(doc_id)
 
             return results
@@ -555,19 +658,21 @@ class DocumentManager:
 
     def get_stats(self) -> Dict[str, Any]:
         """Get document store statistics"""
-        docs = self.metadata['documents']
+        docs = self.metadata["documents"]
 
         stats = {
-            'total_documents': len(docs),
-            'by_type': {},
-            'vectorized_count': sum(1 for doc in docs if doc.get('vectorized', False)),
-            'total_size_mb': round(sum(doc.get('size_bytes', 0) for doc in docs) / (1024 * 1024), 2)
+            "total_documents": len(docs),
+            "by_type": {},
+            "vectorized_count": sum(1 for doc in docs if doc.get("vectorized", False)),
+            "total_size_mb": round(
+                sum(doc.get("size_bytes", 0) for doc in docs) / (1024 * 1024), 2
+            ),
         }
 
         # Count by document type
         for doc in docs:
-            doc_type = doc.get('doc_type', 'unknown')
-            stats['by_type'][doc_type] = stats['by_type'].get(doc_type, 0) + 1
+            doc_type = doc.get("doc_type", "unknown")
+            stats["by_type"][doc_type] = stats["by_type"].get(doc_type, 0) + 1
 
         return stats
 
@@ -584,7 +689,7 @@ if __name__ == "__main__":
         file_path="README.md",
         file_content=content,
         doc_type="guide",
-        description="Project README file"
+        description="Project README file",
     )
 
     print(f"Upload result: {result}")

@@ -18,7 +18,8 @@ Linear regression and Prophet have been removed:
 import re
 import logging
 from typing import Dict, Any, Optional
-from ui_formatter import UIFormatter
+from scm_chatbot.ui.ui_formatter import UIFormatter
+from scm_chatbot.llm.guardrails import AGENT_SAFETY_CLAUSE
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ try:
     from langchain_core.tools import Tool
     from langchain_core.prompts import ChatPromptTemplate
     from langchain.agents import AgentExecutor, create_tool_calling_agent
+
     LANGCHAIN_AVAILABLE = True
 except ImportError:
     LANGCHAIN_AVAILABLE = False
@@ -37,15 +39,21 @@ except ImportError:
 class ForecastingAgent:
     """Demand forecasting agent — SARIMA time series only."""
 
-    def __init__(self, analytics_engine, llm_client=None, use_langchain: bool = True,
-                 rag_module=None, forecasting_engine=None):
-        self.analytics          = analytics_engine
-        self.llm_client         = llm_client
-        self.use_langchain      = use_langchain and LANGCHAIN_AVAILABLE
-        self.rag_module         = rag_module
+    def __init__(
+        self,
+        analytics_engine,
+        llm_client=None,
+        use_langchain: bool = True,
+        rag_module=None,
+        forecasting_engine=None,
+    ):
+        self.analytics = analytics_engine
+        self.llm_client = llm_client
+        self.use_langchain = use_langchain and LANGCHAIN_AVAILABLE
+        self.rag_module = rag_module
         self.forecasting_engine = forecasting_engine
-        self.agent_executor     = None
-        self._pending_chart: Optional[str] = None    # primary chart (line)
+        self.agent_executor = None
+        self._pending_chart: Optional[str] = None  # primary chart (line)
         self._pending_charts: Optional[list] = None  # all charts (line + bar + pie)
 
         if self.use_langchain and llm_client:
@@ -185,8 +193,11 @@ class ForecastingAgent:
                 ),
             ]
 
-            prompt = ChatPromptTemplate.from_messages([
-                ("system", """You are a Demand Forecasting Agent powered by SARIMA.
+            prompt = ChatPromptTemplate.from_messages(
+                [
+                    (
+                        "system",
+                        """You are a Demand Forecasting Agent powered by SARIMA.
 You use SARIMA (Seasonal AutoRegressive Integrated Moving Average) time series modelling
 on weekly-aggregated data. This achieves ~15-20% MAPE vs 100%+ for naive daily baselines.
 
@@ -236,9 +247,12 @@ RESPONSE GUIDELINES:
 - Provide trend direction, average forecast, and MAPE in the answer.
 - Mention that the chart shows the historical baseline and 95% confidence interval.
 - Be concise — surface the most important numbers only unless asked for details.
-- "What is the forecasting policy?" → Use the document context if provided."""),
-                ("human", "{input}"),
-            ])
+- "What is the forecasting policy?" → Use the document context if provided."""
+                        + AGENT_SAFETY_CLAUSE,
+                    ),
+                    ("human", "{input}"),
+                ]
+            )
 
             agent = create_tool_calling_agent(self.llm_client, tools, prompt)
             self.agent_executor = AgentExecutor(
@@ -247,7 +261,9 @@ RESPONSE GUIDELINES:
                 verbose=False,
                 handle_parsing_errors=True,
             )
-            logger.info("Forecasting Agent LangChain executor initialized (all SARIMA tools)")
+            logger.info(
+                "Forecasting Agent LangChain executor initialized (all SARIMA tools)"
+            )
         except Exception as e:
             logger.error(f"Failed to initialize Forecasting agent: {e}")
             self.use_langchain = False
@@ -270,14 +286,14 @@ RESPONSE GUIDELINES:
                 "Ensure statsmodels is installed: pip install statsmodels"
             )
         try:
-            digits  = re.search(r'\d+', str(query))
+            digits = re.search(r"\d+", str(query))
             periods = int(digits.group()) if digits else 30
-            result  = self.forecasting_engine.forecast_sarima(periods=periods)
-            if 'error' in result:
-                return result['error']
-            self._pending_chart = result.get('chart_base64')
-            self._pending_charts = result.get('charts_base64')
-            return result['summary_text']
+            result = self.forecasting_engine.forecast_sarima(periods=periods)
+            if "error" in result:
+                return result["error"]
+            self._pending_chart = result.get("chart_base64")
+            self._pending_charts = result.get("charts_base64")
+            return result["summary_text"]
         except Exception as e:
             logger.error(f"SARIMA demand forecast error: {e}")
             return f"SARIMA demand forecast error: {e}"
@@ -289,14 +305,14 @@ RESPONSE GUIDELINES:
         if not self.forecasting_engine:
             return "SARIMA engine not initialised. pip install statsmodels"
         try:
-            digits  = re.search(r'\d+', str(query))
+            digits = re.search(r"\d+", str(query))
             periods = int(digits.group()) if digits else 30
-            result  = self.forecasting_engine.forecast_revenue(periods=periods)
-            if 'error' in result:
-                return result['error']
-            self._pending_chart = result.get('chart_base64')
-            self._pending_charts = result.get('charts_base64')
-            return result['summary_text']
+            result = self.forecasting_engine.forecast_revenue(periods=periods)
+            if "error" in result:
+                return result["error"]
+            self._pending_chart = result.get("chart_base64")
+            self._pending_charts = result.get("charts_base64")
+            return result["summary_text"]
         except Exception as e:
             logger.error(f"SARIMA revenue forecast error: {e}")
             return f"SARIMA revenue forecast error: {e}"
@@ -308,14 +324,14 @@ RESPONSE GUIDELINES:
         if not self.forecasting_engine:
             return "SARIMA engine not initialised. pip install statsmodels"
         try:
-            digits  = re.search(r'\d+', str(query))
+            digits = re.search(r"\d+", str(query))
             periods = int(digits.group()) if digits else 30
-            result  = self.forecasting_engine.forecast_delay_rate(periods=periods)
-            if 'error' in result:
-                return result['error']
-            self._pending_chart = result.get('chart_base64')
-            self._pending_charts = result.get('charts_base64')
-            return result['summary_text']
+            result = self.forecasting_engine.forecast_delay_rate(periods=periods)
+            if "error" in result:
+                return result["error"]
+            self._pending_chart = result.get("chart_base64")
+            self._pending_charts = result.get("charts_base64")
+            return result["summary_text"]
         except Exception as e:
             logger.error(f"SARIMA delay rate forecast error: {e}")
             return f"SARIMA delay rate forecast error: {e}"
@@ -330,14 +346,16 @@ RESPONSE GUIDELINES:
         if not self.forecasting_engine:
             return "SARIMA engine not initialised. pip install statsmodels"
         try:
-            digits  = re.search(r'\d+', str(query))
+            digits = re.search(r"\d+", str(query))
             periods = int(digits.group()) if digits else 30
-            result  = self.forecasting_engine.forecast_top_categories(periods=periods, top_n=5)
-            if 'error' in result:
-                return result['error']
-            self._pending_chart = result.get('chart_base64')
-            self._pending_charts = result.get('charts_base64')
-            return result['summary_text']
+            result = self.forecasting_engine.forecast_top_categories(
+                periods=periods, top_n=5
+            )
+            if "error" in result:
+                return result["error"]
+            self._pending_chart = result.get("chart_base64")
+            self._pending_charts = result.get("charts_base64")
+            return result["summary_text"]
         except Exception as e:
             logger.error(f"SARIMA all-categories forecast error: {e}")
             return f"SARIMA all-categories forecast error: {e}"
@@ -349,14 +367,14 @@ RESPONSE GUIDELINES:
         if not self.forecasting_engine:
             return "SARIMA engine not initialised. pip install statsmodels"
         try:
-            digits  = re.search(r'\d+', str(query))
+            digits = re.search(r"\d+", str(query))
             periods = int(digits.group()) if digits else 30
-            result  = self.forecasting_engine.forecast_category(periods=periods)
-            if 'error' in result:
-                return result['error']
-            self._pending_chart = result.get('chart_base64')
-            self._pending_charts = result.get('charts_base64')
-            return result['summary_text']
+            result = self.forecasting_engine.forecast_category(periods=periods)
+            if "error" in result:
+                return result["error"]
+            self._pending_chart = result.get("chart_base64")
+            self._pending_charts = result.get("charts_base64")
+            return result["summary_text"]
         except Exception as e:
             logger.error(f"SARIMA category forecast error: {e}")
             return f"SARIMA category forecast error: {e}"
@@ -366,14 +384,20 @@ RESPONSE GUIDELINES:
     def query(self, user_query: str, classification: Dict = None) -> Dict[str, Any]:
         """Process a forecasting query — SARIMA only."""
         try:
-            should_use_rag      = classification.get('use_rag', True)      if classification else True
-            should_use_database = classification.get('use_database', True) if classification else True
+            should_use_rag = (
+                classification.get("use_rag", True) if classification else True
+            )
+            should_use_database = (
+                classification.get("use_database", True) if classification else True
+            )
 
-            logger.info(f"Forecasting Agent — RAG: {should_use_rag} | DB: {should_use_database}")
+            logger.info(
+                f"Forecasting Agent — RAG: {should_use_rag} | DB: {should_use_database}"
+            )
 
             # RAG context retrieval
             rag_context = None
-            used_rag    = False
+            used_rag = False
             if self.rag_module and should_use_rag:
                 try:
                     rag_context = self.rag_module.retrieve_context(user_query)
@@ -387,52 +411,60 @@ RESPONSE GUIDELINES:
             if self.use_langchain and self.agent_executor:
                 augmented_query = (
                     f"Context from documents:\n{rag_context}\n\nUser query: {user_query}"
-                    if used_rag else user_query
+                    if used_rag
+                    else user_query
                 )
 
                 self._pending_chart = None
                 self._pending_charts = None
                 response = self.agent_executor.invoke({"input": augmented_query})
 
-                chart_b64  = self._pending_chart
+                chart_b64 = self._pending_chart
                 charts_b64 = self._pending_charts
 
                 return {
-                    'response':      response['output'],
-                    'chart_base64':  chart_b64,
-                    'charts_base64': charts_b64,
-                    'agent':         'Forecasting Agent (SARIMA)' + (' + RAG' if used_rag else ''),
-                    'success':       True,
-                    'used_rag':      used_rag,
+                    "response": response["output"],
+                    "chart_base64": chart_b64,
+                    "charts_base64": charts_b64,
+                    "agent": "Forecasting Agent (SARIMA)"
+                    + (" + RAG" if used_rag else ""),
+                    "success": True,
+                    "used_rag": used_rag,
                 }
 
             # ── Rule-based path ──────────────────────────────────────────────
             query_lower = user_query.lower()
 
             # Policy-only questions
-            if classification and classification.get('query_type') == 'policy':
+            if classification and classification.get("query_type") == "policy":
                 if used_rag and rag_context and len(rag_context.strip()) > 20:
                     return {
-                        'response':     UIFormatter.synthesize_rag_response(user_query, rag_context, self.llm_client),
-                        'chart_base64': None,
-                        'agent':        'Forecasting Agent (SARIMA) + RAG',
-                        'success':      True,
-                        'used_rag':     True,
-                        'classification': classification,
+                        "response": UIFormatter.synthesize_rag_response(
+                            user_query, rag_context, self.llm_client
+                        ),
+                        "chart_base64": None,
+                        "agent": "Forecasting Agent (SARIMA) + RAG",
+                        "success": True,
+                        "used_rag": True,
+                        "classification": classification,
                     }
                 return {
-                    'response':     'No policy documents found. Please ask a demand forecasting question.',
-                    'chart_base64': None,
-                    'agent':        'Forecasting Agent (SARIMA)',
-                    'success':      True,
-                    'used_rag':     False,
-                    'classification': classification,
+                    "response": "No policy documents found. Please ask a demand forecasting question.",
+                    "chart_base64": None,
+                    "agent": "Forecasting Agent (SARIMA)",
+                    "success": True,
+                    "used_rag": False,
+                    "classification": classification,
                 }
 
             # Determine forecast horizon
-            if '90' in query_lower or 'three month' in query_lower or 'quarter' in query_lower:
+            if (
+                "90" in query_lower
+                or "three month" in query_lower
+                or "quarter" in query_lower
+            ):
                 periods = 90
-            elif '60' in query_lower or 'two month' in query_lower:
+            elif "60" in query_lower or "two month" in query_lower:
                 periods = 60
             else:
                 periods = 30
@@ -440,54 +472,81 @@ RESPONSE GUIDELINES:
             # Determine forecast type from query text
             self._pending_chart = None
             self._pending_charts = None
-            _all_cat_kw = ['each category', 'all categories', 'per category',
-                           'every category', 'category comparison', 'compare categories',
-                           'breakdown by category', 'category breakdown',
-                           'each product category', 'all product categories']
-            if any(kw in query_lower for kw in ['revenue', 'payment', 'sales revenue']):
-                response  = self._forecast_revenue(str(periods))
-                agent_tag = 'Forecasting Agent (Revenue)'
-            elif any(kw in query_lower for kw in ['delay rate', 'late rate', 'on-time rate',
-                                                    'delivery rate', 'forecast delay']):
-                response  = self._forecast_delay_rate(str(periods))
-                agent_tag = 'Forecasting Agent (Delay Rate)'
+            _all_cat_kw = [
+                "each category",
+                "all categories",
+                "per category",
+                "every category",
+                "category comparison",
+                "compare categories",
+                "breakdown by category",
+                "category breakdown",
+                "each product category",
+                "all product categories",
+            ]
+            if any(kw in query_lower for kw in ["revenue", "payment", "sales revenue"]):
+                response = self._forecast_revenue(str(periods))
+                agent_tag = "Forecasting Agent (Revenue)"
+            elif any(
+                kw in query_lower
+                for kw in [
+                    "delay rate",
+                    "late rate",
+                    "on-time rate",
+                    "delivery rate",
+                    "forecast delay",
+                ]
+            ):
+                response = self._forecast_delay_rate(str(periods))
+                agent_tag = "Forecasting Agent (Delay Rate)"
             elif any(kw in query_lower for kw in _all_cat_kw):
-                response  = self._forecast_all_categories(str(periods))
-                agent_tag = 'Forecasting Agent (All Categories)'
-            elif any(kw in query_lower for kw in ['category', 'product category',
-                                                    'top category', 'category demand']):
-                response  = self._forecast_category(str(periods))
-                agent_tag = 'Forecasting Agent (Category)'
+                response = self._forecast_all_categories(str(periods))
+                agent_tag = "Forecasting Agent (All Categories)"
+            elif any(
+                kw in query_lower
+                for kw in [
+                    "category",
+                    "product category",
+                    "top category",
+                    "category demand",
+                ]
+            ):
+                response = self._forecast_category(str(periods))
+                agent_tag = "Forecasting Agent (Category)"
             else:
-                response  = self._forecast_sarima(str(periods))
-                agent_tag = 'Forecasting Agent (SARIMA)'
+                response = self._forecast_sarima(str(periods))
+                agent_tag = "Forecasting Agent (SARIMA)"
 
-            chart_b64  = self._pending_chart
+            chart_b64 = self._pending_chart
             charts_b64 = self._pending_charts
 
             # Append RAG context for mixed queries
-            if (used_rag and should_use_rag and rag_context
-                    and len(rag_context.strip()) > 20
-                    and 'no relevant' not in rag_context.lower()
-                    and classification
-                    and classification.get('query_type') == 'mixed'):
+            if (
+                used_rag
+                and should_use_rag
+                and rag_context
+                and len(rag_context.strip()) > 20
+                and "no relevant" not in rag_context.lower()
+                and classification
+                and classification.get("query_type") == "mixed"
+            ):
                 response += f"\n\n{UIFormatter.format_rag_context(rag_context)}"
 
             return {
-                'response':      response,
-                'chart_base64':  chart_b64,
-                'charts_base64': charts_b64,
-                'agent':         agent_tag + (' + RAG' if used_rag else ''),
-                'success':       True,
-                'used_rag':      used_rag,
-                'classification': classification,
+                "response": response,
+                "chart_base64": chart_b64,
+                "charts_base64": charts_b64,
+                "agent": agent_tag + (" + RAG" if used_rag else ""),
+                "success": True,
+                "used_rag": used_rag,
+                "classification": classification,
             }
 
         except Exception as e:
             logger.error(f"Forecasting Agent error: {e}")
             return {
-                'response':  f"Error processing forecast query: {e}",
-                'agent':     'Forecasting Agent (SARIMA)',
-                'success':   False,
-                'used_rag':  False,
+                "response": f"Error processing forecast query: {e}",
+                "agent": "Forecasting Agent (SARIMA)",
+                "success": False,
+                "used_rag": False,
             }

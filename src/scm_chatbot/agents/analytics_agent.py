@@ -10,10 +10,12 @@ from typing import Dict, Any, Optional
 import pandas as pd
 
 import matplotlib
-matplotlib.use('Agg')
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from ui_formatter import UIFormatter
+from scm_chatbot.ui.ui_formatter import UIFormatter
+from scm_chatbot.llm.guardrails import AGENT_SAFETY_CLAUSE
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +24,7 @@ try:
     from langchain_core.tools import Tool
     from langchain_core.prompts import ChatPromptTemplate
     from langchain.agents import AgentExecutor, create_tool_calling_agent
+
     LANGCHAIN_AVAILABLE = True
 except ImportError:
     LANGCHAIN_AVAILABLE = False
@@ -31,7 +34,13 @@ except ImportError:
 class AnalyticsAgent:
     """Specialized agent for revenue and performance analytics"""
 
-    def __init__(self, analytics_engine, llm_client=None, use_langchain: bool = True, rag_module=None):
+    def __init__(
+        self,
+        analytics_engine,
+        llm_client=None,
+        use_langchain: bool = True,
+        rag_module=None,
+    ):
         """
         Initialize Analytics Agent
 
@@ -50,7 +59,9 @@ class AnalyticsAgent:
         if self.use_langchain and llm_client:
             self._initialize_langchain_agent()
 
-        logger.info(f"Analytics Agent initialized (LangChain: {self.use_langchain}, RAG: {rag_module is not None})")
+        logger.info(
+            f"Analytics Agent initialized (LangChain: {self.use_langchain}, RAG: {rag_module is not None})"
+        )
 
     def _initialize_langchain_agent(self):
         """Initialize LangChain agent"""
@@ -59,22 +70,25 @@ class AnalyticsAgent:
                 Tool(
                     name="GetRevenueAnalysis",
                     func=self._get_revenue_analysis,
-                    description="Get revenue statistics including total revenue, average order value, and growth rate"
+                    description="Get revenue statistics including total revenue, average order value, and growth rate",
                 ),
                 Tool(
                     name="GetProductPerformance",
                     func=self._get_product_performance,
-                    description="Get product performance metrics including top products and sales volumes"
+                    description="Get product performance metrics including top products and sales volumes",
                 ),
                 Tool(
                     name="GetCustomerBehavior",
                     func=self._get_customer_behavior,
-                    description="Get customer behavior analysis including repeat rate and lifetime value"
+                    description="Get customer behavior analysis including repeat rate and lifetime value",
                 ),
             ]
 
-            prompt = ChatPromptTemplate.from_messages([
-                ("system", """You are a specialized Analytics Agent for revenue and performance analysis.
+            prompt = ChatPromptTemplate.from_messages(
+                [
+                    (
+                        "system",
+                        """You are a specialized Analytics Agent for revenue and performance analysis.
 Your expertise is in analyzing sales, products, and customer behavior.
 
 CRITICAL: Determine if the user is asking about:
@@ -100,16 +114,16 @@ RESPONSE GUIDELINES:
 - "Analyze customer behavior" → Provide detailed customer insights
 - "What is the policy for X?" → Use the document context if provided
 
-Extract only the relevant information from tool results to answer the specific question."""),
-                ("human", "{input}"),
-            ])
+Extract only the relevant information from tool results to answer the specific question."""
+                        + AGENT_SAFETY_CLAUSE,
+                    ),
+                    ("human", "{input}"),
+                ]
+            )
 
             agent = create_tool_calling_agent(self.llm_client, tools, prompt)
             self.agent_executor = AgentExecutor(
-                agent=agent,
-                tools=tools,
-                verbose=False,
-                handle_parsing_errors=True
+                agent=agent, tools=tools, verbose=False, handle_parsing_errors=True
             )
 
             logger.info("Analytics Agent LangChain executor initialized")
@@ -160,9 +174,9 @@ Extract only the relevant information from tool results to answer the specific q
         """Encode a matplotlib figure to base64 PNG string."""
         try:
             buf = io.BytesIO()
-            fig.savefig(buf, format='png', bbox_inches='tight', dpi=120)
+            fig.savefig(buf, format="png", bbox_inches="tight", dpi=120)
             buf.seek(0)
-            encoded = base64.b64encode(buf.read()).decode('utf-8')
+            encoded = base64.b64encode(buf.read()).decode("utf-8")
             plt.close(fig)
             return encoded
         except Exception as e:
@@ -174,7 +188,7 @@ Extract only the relevant information from tool results to answer the specific q
         """Monthly revenue line chart."""
         try:
             result = self.analytics.analyze_revenue_trends()
-            monthly = result.get('monthly_revenue', {})
+            monthly = result.get("monthly_revenue", {})
             if not monthly:
                 return None
 
@@ -182,24 +196,42 @@ Extract only the relevant information from tool results to answer the specific q
             values = [monthly[k] / 1000 for k in labels]  # convert to thousands
 
             fig, ax = plt.subplots(figsize=(9, 3.8))
-            fig.patch.set_facecolor('#1e293b')
-            ax.set_facecolor('#0f172a')
+            fig.patch.set_facecolor("#1e293b")
+            ax.set_facecolor("#0f172a")
 
-            ax.plot(range(len(labels)), values, color='#6366f1', linewidth=2.2,
-                    marker='o', markersize=4, markerfacecolor='#818cf8')
-            ax.fill_between(range(len(labels)), values, alpha=0.15, color='#6366f1')
+            ax.plot(
+                range(len(labels)),
+                values,
+                color="#6366f1",
+                linewidth=2.2,
+                marker="o",
+                markersize=4,
+                markerfacecolor="#818cf8",
+            )
+            ax.fill_between(range(len(labels)), values, alpha=0.15, color="#6366f1")
 
             # x-axis labels — show every 3rd to avoid crowding
             step = max(1, len(labels) // 8)
             ax.set_xticks(range(0, len(labels), step))
-            ax.set_xticklabels([labels[i] for i in range(0, len(labels), step)],
-                               rotation=35, ha='right', fontsize=7.5, color='#94a3b8')
-            ax.tick_params(axis='y', labelcolor='#94a3b8', labelsize=8)
-            ax.set_ylabel('Revenue (K $)', color='#94a3b8', fontsize=8.5)
-            ax.set_title('Monthly Revenue', color='#e2e8f0', fontsize=10, fontweight='bold', pad=8)
-            ax.spines[:].set_color('#334155')
-            ax.grid(axis='y', color='#334155', alpha=0.5, linewidth=0.6)
-            ax.tick_params(colors='#475569')
+            ax.set_xticklabels(
+                [labels[i] for i in range(0, len(labels), step)],
+                rotation=35,
+                ha="right",
+                fontsize=7.5,
+                color="#94a3b8",
+            )
+            ax.tick_params(axis="y", labelcolor="#94a3b8", labelsize=8)
+            ax.set_ylabel("Revenue (K $)", color="#94a3b8", fontsize=8.5)
+            ax.set_title(
+                "Monthly Revenue",
+                color="#e2e8f0",
+                fontsize=10,
+                fontweight="bold",
+                pad=8,
+            )
+            ax.spines[:].set_color("#334155")
+            ax.grid(axis="y", color="#334155", alpha=0.5, linewidth=0.6)
+            ax.tick_params(colors="#475569")
             fig.tight_layout()
             return self._generate_chart_base64(fig)
         except Exception as e:
@@ -210,35 +242,43 @@ Extract only the relevant information from tool results to answer the specific q
         """Top product categories horizontal bar chart."""
         try:
             result = self.analytics.analyze_product_performance()
-            cat_perf = result.get('category_performance', {})
-            price_data = cat_perf.get('price', {})
+            cat_perf = result.get("category_performance", {})
+            price_data = cat_perf.get("price", {})
             if not price_data:
                 return None
 
             # Sort and take top 10
-            sorted_cats = sorted(price_data.items(), key=lambda x: x[1], reverse=True)[:10]
+            sorted_cats = sorted(price_data.items(), key=lambda x: x[1], reverse=True)[
+                :10
+            ]
             labels = [str(k)[:22] for k, _ in sorted_cats]
             values = [v / 1000 for _, v in sorted_cats]
 
             fig, ax = plt.subplots(figsize=(9, 4.2))
-            fig.patch.set_facecolor('#1e293b')
-            ax.set_facecolor('#0f172a')
+            fig.patch.set_facecolor("#1e293b")
+            ax.set_facecolor("#0f172a")
 
-            bars = ax.barh(range(len(labels)), values, color='#6366f1', height=0.65)
+            bars = ax.barh(range(len(labels)), values, color="#6366f1", height=0.65)
             # Gradient-like effect: lighter shade on top bar
             if bars:
-                bars[0].set_color('#818cf8')
+                bars[0].set_color("#818cf8")
 
             ax.set_yticks(range(len(labels)))
-            ax.set_yticklabels(labels[::-1] if False else labels,
-                               fontsize=7.5, color='#94a3b8')
+            ax.set_yticklabels(
+                labels[::-1] if False else labels, fontsize=7.5, color="#94a3b8"
+            )
             ax.invert_yaxis()
-            ax.tick_params(axis='x', labelcolor='#94a3b8', labelsize=8)
-            ax.set_xlabel('Revenue (K $)', color='#94a3b8', fontsize=8.5)
-            ax.set_title('Top Categories by Revenue', color='#e2e8f0',
-                         fontsize=10, fontweight='bold', pad=8)
-            ax.spines[:].set_color('#334155')
-            ax.grid(axis='x', color='#334155', alpha=0.5, linewidth=0.6)
+            ax.tick_params(axis="x", labelcolor="#94a3b8", labelsize=8)
+            ax.set_xlabel("Revenue (K $)", color="#94a3b8", fontsize=8.5)
+            ax.set_title(
+                "Top Categories by Revenue",
+                color="#e2e8f0",
+                fontsize=10,
+                fontweight="bold",
+                pad=8,
+            )
+            ax.spines[:].set_color("#334155")
+            ax.grid(axis="x", color="#334155", alpha=0.5, linewidth=0.6)
             fig.tight_layout()
             return self._generate_chart_base64(fig)
         except Exception as e:
@@ -249,29 +289,38 @@ Extract only the relevant information from tool results to answer the specific q
         """Customers by state bar chart."""
         try:
             result = self.analytics.analyze_customer_behavior()
-            by_state = result.get('customers_by_state', {})
+            by_state = result.get("customers_by_state", {})
             if not by_state:
                 return None
 
-            sorted_states = sorted(by_state.items(), key=lambda x: x[1], reverse=True)[:12]
+            sorted_states = sorted(by_state.items(), key=lambda x: x[1], reverse=True)[
+                :12
+            ]
             labels = [str(k) for k, _ in sorted_states]
             values = [v for _, v in sorted_states]
 
             fig, ax = plt.subplots(figsize=(9, 3.8))
-            fig.patch.set_facecolor('#1e293b')
-            ax.set_facecolor('#0f172a')
+            fig.patch.set_facecolor("#1e293b")
+            ax.set_facecolor("#0f172a")
 
-            bar_colors = ['#818cf8' if i == 0 else '#6366f1' for i in range(len(labels))]
+            bar_colors = [
+                "#818cf8" if i == 0 else "#6366f1" for i in range(len(labels))
+            ]
             ax.bar(range(len(labels)), values, color=bar_colors, width=0.65)
 
             ax.set_xticks(range(len(labels)))
-            ax.set_xticklabels(labels, fontsize=8, color='#94a3b8')
-            ax.tick_params(axis='y', labelcolor='#94a3b8', labelsize=8)
-            ax.set_ylabel('Customers', color='#94a3b8', fontsize=8.5)
-            ax.set_title('Customers by State', color='#e2e8f0',
-                         fontsize=10, fontweight='bold', pad=8)
-            ax.spines[:].set_color('#334155')
-            ax.grid(axis='y', color='#334155', alpha=0.5, linewidth=0.6)
+            ax.set_xticklabels(labels, fontsize=8, color="#94a3b8")
+            ax.tick_params(axis="y", labelcolor="#94a3b8", labelsize=8)
+            ax.set_ylabel("Customers", color="#94a3b8", fontsize=8.5)
+            ax.set_title(
+                "Customers by State",
+                color="#e2e8f0",
+                fontsize=10,
+                fontweight="bold",
+                pad=8,
+            )
+            ax.spines[:].set_color("#334155")
+            ax.grid(axis="y", color="#334155", alpha=0.5, linewidth=0.6)
             fig.tight_layout()
             return self._generate_chart_base64(fig)
         except Exception as e:
@@ -280,9 +329,9 @@ Extract only the relevant information from tool results to answer the specific q
 
     def _get_chart_for_query(self, query_lower: str) -> Optional[str]:
         """Return appropriate chart based on query keywords."""
-        if any(w in query_lower for w in ['product', 'item', 'inventory', 'category']):
+        if any(w in query_lower for w in ["product", "item", "inventory", "category"]):
             return self._chart_products()
-        elif any(w in query_lower for w in ['customer', 'buyer', 'client', 'state']):
+        elif any(w in query_lower for w in ["customer", "buyer", "client", "state"]):
             return self._chart_customers()
         else:
             return self._chart_revenue()
@@ -291,10 +340,16 @@ Extract only the relevant information from tool results to answer the specific q
         """Process analytics query"""
         try:
             # Determine if should use RAG based on classification
-            should_use_rag = classification.get('use_rag', True) if classification else True
-            should_use_database = classification.get('use_database', True) if classification else True
+            should_use_rag = (
+                classification.get("use_rag", True) if classification else True
+            )
+            should_use_database = (
+                classification.get("use_database", True) if classification else True
+            )
 
-            logger.info(f"Analytics Agent - Use RAG: {should_use_rag} | Use Database: {should_use_database}")
+            logger.info(
+                f"Analytics Agent - Use RAG: {should_use_rag} | Use Database: {should_use_database}"
+            )
 
             # Try RAG context retrieval if classification allows it
             rag_context = None
@@ -320,16 +375,19 @@ Extract only the relevant information from tool results to answer the specific q
 
                 # Generate chart for data queries (skip for policy-only)
                 chart_b64 = None
-                is_policy = classification and classification.get('query_type') == 'policy'
+                is_policy = (
+                    classification and classification.get("query_type") == "policy"
+                )
                 if not is_policy and should_use_database:
                     chart_b64 = self._get_chart_for_query(user_query.lower())
 
                 return {
-                    'response': response['output'],
-                    'chart_base64': chart_b64,
-                    'agent': 'Analytics Agent (LangChain)' + (' + RAG' if used_rag else ''),
-                    'success': True,
-                    'used_rag': used_rag
+                    "response": response["output"],
+                    "chart_base64": chart_b64,
+                    "agent": "Analytics Agent (LangChain)"
+                    + (" + RAG" if used_rag else ""),
+                    "success": True,
+                    "used_rag": used_rag,
                 }
 
             # Fallback to rule-based
@@ -337,33 +395,39 @@ Extract only the relevant information from tool results to answer the specific q
                 query_lower = user_query.lower()
 
                 # NEW: If classification says this is a POLICY ONLY question
-                if classification and classification.get('query_type') == 'policy':
+                if classification and classification.get("query_type") == "policy":
                     if used_rag and rag_context and len(rag_context.strip()) > 20:
-                        response = UIFormatter.synthesize_rag_response(user_query, rag_context, self.llm_client)
+                        response = UIFormatter.synthesize_rag_response(
+                            user_query, rag_context, self.llm_client
+                        )
 
                         return {
-                            'response': response,
-                            'chart_base64': None,
-                            'agent': 'Analytics Agent (Rule-Based) + RAG',
-                            'success': True,
-                            'used_rag': True,
-                            'classification': classification
+                            "response": response,
+                            "chart_base64": None,
+                            "agent": "Analytics Agent (Rule-Based) + RAG",
+                            "success": True,
+                            "used_rag": True,
+                            "classification": classification,
                         }
                     else:
                         return {
-                            'response': "No policy documents found for this query. Please rephrase or ask a data question.",
-                            'chart_base64': None,
-                            'agent': 'Analytics Agent (Rule-Based)',
-                            'success': True,
-                            'used_rag': False,
-                            'classification': classification
+                            "response": "No policy documents found for this query. Please rephrase or ask a data question.",
+                            "chart_base64": None,
+                            "agent": "Analytics Agent (Rule-Based)",
+                            "success": True,
+                            "used_rag": False,
+                            "classification": classification,
                         }
 
                 # NEW: If classification says this is DATA ONLY or default - skip policy check
                 # Data/statistics queries
-                if any(word in query_lower for word in ['product', 'item', 'inventory']):
+                if any(
+                    word in query_lower for word in ["product", "item", "inventory"]
+                ):
                     response = self._get_product_performance()
-                elif any(word in query_lower for word in ['customer', 'buyer', 'client']):
+                elif any(
+                    word in query_lower for word in ["customer", "buyer", "client"]
+                ):
                     response = self._get_customer_behavior()
                 else:
                     response = self._get_revenue_analysis()
@@ -372,27 +436,34 @@ Extract only the relevant information from tool results to answer the specific q
                 chart_b64 = self._get_chart_for_query(query_lower)
 
                 # Append RAG context only if classification allows it (mixed queries)
-                if used_rag and should_use_rag and rag_context and len(rag_context.strip()) > 20 and "no relevant" not in rag_context.lower():
+                if (
+                    used_rag
+                    and should_use_rag
+                    and rag_context
+                    and len(rag_context.strip()) > 20
+                    and "no relevant" not in rag_context.lower()
+                ):
                     # Only append if this is a mixed query (both RAG and database)
-                    if classification and classification.get('query_type') == 'mixed':
+                    if classification and classification.get("query_type") == "mixed":
                         # Use UIFormatter for better RAG context formatting
                         formatted_rag = UIFormatter.format_rag_context(rag_context)
                         response += f"\n\n{formatted_rag}"
 
                 return {
-                    'response': response,
-                    'chart_base64': chart_b64,
-                    'agent': 'Analytics Agent (Rule-Based)' + (' + RAG' if used_rag else ''),
-                    'success': True,
-                    'used_rag': used_rag,
-                    'classification': classification
+                    "response": response,
+                    "chart_base64": chart_b64,
+                    "agent": "Analytics Agent (Rule-Based)"
+                    + (" + RAG" if used_rag else ""),
+                    "success": True,
+                    "used_rag": used_rag,
+                    "classification": classification,
                 }
 
         except Exception as e:
             logger.error(f"Analytics Agent error: {e}")
             return {
-                'response': f"Error processing analytics query: {e}",
-                'agent': 'Analytics Agent',
-                'success': False,
-                'used_rag': False
+                "response": f"Error processing analytics query: {e}",
+                "agent": "Analytics Agent",
+                "success": False,
+                "used_rag": False,
             }

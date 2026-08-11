@@ -8,18 +8,20 @@ Usage:
 """
 
 import sys, os
-sys.path.insert(0, os.path.dirname(__file__))
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
 from fastapi import FastAPI, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 import uvicorn
 
-from modules.auth_utils import authenticate, get_role, sign_user
+from scm_chatbot.services.auth_utils import authenticate, get_role, sign_user
 
 app = FastAPI(title="SCM Chatbot Login")
 
 CHATBOT_URL = "http://127.0.0.1:7860/"
-LOGIN_URL   = "http://127.0.0.1:8000/"
+LOGIN_URL = "http://127.0.0.1:8000/"
+
 
 # ── HTML Template ─────────────────────────────────────────────────────────────
 def build_page(error: str = "", info: str = "") -> str:
@@ -27,15 +29,17 @@ def build_page(error: str = "", info: str = "") -> str:
         f'<div class="error-box">'
         f'<svg viewBox="0 0 24 24" width="16" height="16"><circle cx="12" cy="12" r="10"/>'
         f'<line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
-        f'{error}</div>'
-        if error else ""
+        f"{error}</div>"
+        if error
+        else ""
     )
     info_html = (
         f'<div class="info-box">'
         f'<svg viewBox="0 0 24 24" width="16" height="16"><circle cx="12" cy="12" r="10"/>'
         f'<line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
-        f'{info}</div>'
-        if info else ""
+        f"{info}</div>"
+        if info
+        else ""
     )
 
     return f"""<!DOCTYPE html>
@@ -306,6 +310,7 @@ def build_page(error: str = "", info: str = "") -> str:
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
+
 @app.get("/", response_class=HTMLResponse)
 async def login_page():
     return build_page()
@@ -319,8 +324,8 @@ async def handle_login(
     uname = username.strip().lower()
     if authenticate(uname, password):
         role = get_role(uname)
-        sig  = sign_user(uname, role)
-        url  = f"{CHATBOT_URL}?user={uname}&role={role}&sig={sig}"
+        sig = sign_user(uname, role)
+        url = f"{CHATBOT_URL}?user={uname}&role={role}&sig={sig}"
         return RedirectResponse(url=url, status_code=303)
     return HTMLResponse(
         content=build_page(error="Invalid username or password. Please try again."),

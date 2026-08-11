@@ -58,6 +58,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install -e .
           pip install pytest pytest-cov
 
       - name: Create test data directories
@@ -70,9 +71,9 @@ jobs:
 
       - name: Verify imports
         run: |
-          python -c "from intent_classifier import IntentClassifier; print('IntentClassifier OK')"
-          python -c "from ui_formatter import UIFormatter; print('UIFormatter OK')"
-          python -c "from enhanced_rag import EnhancedRAG; print('EnhancedRAG OK')" || echo "Import check completed"
+          python -c "from scm_chatbot.services.intent_classifier import IntentClassifier; print('IntentClassifier OK')"
+          python -c "from scm_chatbot.ui.ui_formatter import UIFormatter; print('UIFormatter OK')"
+          python -c "from scm_chatbot.rag.enhanced_rag import EnhancedRAG; print('EnhancedRAG OK')" || echo "Import check completed"
 
   # Job 3: Docker Build
   docker-build:

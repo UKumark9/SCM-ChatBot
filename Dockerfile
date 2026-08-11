@@ -54,8 +54,8 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:7860/ || exit 1
 
 # Default command - run the application
-CMD ["python", "main.py", "--rag", "--agentic"]
+CMD ["python", "run.py", "--rag", "--agentic"]
 
 # Alternative commands (uncomment as needed):
-# CMD ["python", "main.py", "--enhanced"]  # Enhanced mode only
-# CMD ["python", "main.py", "--no-rag"]    # Without RAG
+# CMD ["python", "run.py", "--enhanced"]  # Enhanced mode only
+# CMD ["python", "run.py", "--no-rag"]    # Without RAG

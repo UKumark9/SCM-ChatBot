@@ -26,7 +26,7 @@ class MetricsTracker:
         self.active_queries = {}  # query_id -> start_time and metadata
         logger.info("Metrics Tracker initialized")
 
-    def start_query(self, query: str, mode: str = 'agentic') -> str:
+    def start_query(self, query: str, mode: str = "agentic") -> str:
         """
         Start tracking a new query
 
@@ -40,17 +40,19 @@ class MetricsTracker:
         query_id = f"{int(time.time() * 1000)}_{len(self.active_queries)}"
 
         self.active_queries[query_id] = {
-            'query': query,
-            'mode': mode,
-            'start_time': time.time(),
-            'agents_executed': [],
-            'data_sources_used': [],
-            'rag_used': False
+            "query": query,
+            "mode": mode,
+            "start_time": time.time(),
+            "agents_executed": [],
+            "data_sources_used": [],
+            "rag_used": False,
         }
 
         return query_id
 
-    def add_agent_execution(self, query_id: str, agent_name: str, used_rag: bool = False):
+    def add_agent_execution(
+        self, query_id: str, agent_name: str, used_rag: bool = False
+    ):
         """
         Record that an agent was executed for this query
 
@@ -60,9 +62,9 @@ class MetricsTracker:
             used_rag: Whether RAG was used
         """
         if query_id in self.active_queries:
-            self.active_queries[query_id]['agents_executed'].append(agent_name)
+            self.active_queries[query_id]["agents_executed"].append(agent_name)
             if used_rag:
-                self.active_queries[query_id]['rag_used'] = True
+                self.active_queries[query_id]["rag_used"] = True
 
     def add_data_source(self, query_id: str, source: str):
         """
@@ -73,10 +75,12 @@ class MetricsTracker:
             source: Data source name (e.g., 'rag_documents', 'analytics_engine')
         """
         if query_id in self.active_queries:
-            if source not in self.active_queries[query_id]['data_sources_used']:
-                self.active_queries[query_id]['data_sources_used'].append(source)
+            if source not in self.active_queries[query_id]["data_sources_used"]:
+                self.active_queries[query_id]["data_sources_used"].append(source)
 
-    def calculate_hallucination_score(self, query_id: str, response: str, ground_truth_data: Dict = None) -> float:
+    def calculate_hallucination_score(
+        self, query_id: str, response: str, ground_truth_data: Dict = None
+    ) -> float:
         """
         Calculate hallucination risk score (simplified version)
 
@@ -92,15 +96,17 @@ class MetricsTracker:
             return 0.0
 
         # Simple heuristic: if RAG or analytics are used, assume low hallucination
-        rag_used = self.active_queries[query_id].get('rag_used', False)
-        has_data_sources = len(self.active_queries[query_id].get('data_sources_used', [])) > 0
+        rag_used = self.active_queries[query_id].get("rag_used", False)
+        has_data_sources = (
+            len(self.active_queries[query_id].get("data_sources_used", [])) > 0
+        )
 
         if rag_used or has_data_sources or ground_truth_data:
             score = 0.1  # Low risk - data-grounded response
         else:
             score = 0.3  # Medium risk - no grounding data
 
-        self.active_queries[query_id]['hallucination_score'] = score
+        self.active_queries[query_id]["hallucination_score"] = score
         return score
 
     def end_query(self, query_id: str, success: bool = True, error: str = None):
@@ -117,21 +123,21 @@ class MetricsTracker:
 
         query_data = self.active_queries[query_id]
         end_time = time.time()
-        latency_ms = (end_time - query_data['start_time']) * 1000
+        latency_ms = (end_time - query_data["start_time"]) * 1000
 
         # Build final metrics
         metrics = {
-            'query_id': query_id,
-            'query': query_data['query'],
-            'mode': query_data['mode'],
-            'latency_ms': latency_ms,
-            'success': success,
-            'agents_executed': query_data.get('agents_executed', []),
-            'data_sources_used': query_data.get('data_sources_used', []),
-            'rag_used': query_data.get('rag_used', False),
-            'hallucination_score': query_data.get('hallucination_score', 0.0),
-            'timestamp': end_time,
-            'error': error
+            "query_id": query_id,
+            "query": query_data["query"],
+            "mode": query_data["mode"],
+            "latency_ms": latency_ms,
+            "success": success,
+            "agents_executed": query_data.get("agents_executed", []),
+            "data_sources_used": query_data.get("data_sources_used", []),
+            "rag_used": query_data.get("rag_used", False),
+            "hallucination_score": query_data.get("hallucination_score", 0.0),
+            "timestamp": end_time,
+            "error": error,
         }
 
         # Save to history
@@ -163,25 +169,27 @@ class MetricsTracker:
         """
         if not self.metrics_history:
             return {
-                'total_queries': 0,
-                'average_latency_ms': 0,
-                'success_rate': 0,
-                'rag_usage_rate': 0,
-                'average_hallucination_score': 0
+                "total_queries": 0,
+                "average_latency_ms": 0,
+                "success_rate": 0,
+                "rag_usage_rate": 0,
+                "average_hallucination_score": 0,
             }
 
         total = len(self.metrics_history)
-        successful = sum(1 for m in self.metrics_history if m['success'])
-        rag_used = sum(1 for m in self.metrics_history if m['rag_used'])
-        avg_latency = sum(m['latency_ms'] for m in self.metrics_history) / total
-        avg_hallucination = sum(m['hallucination_score'] for m in self.metrics_history) / total
+        successful = sum(1 for m in self.metrics_history if m["success"])
+        rag_used = sum(1 for m in self.metrics_history if m["rag_used"])
+        avg_latency = sum(m["latency_ms"] for m in self.metrics_history) / total
+        avg_hallucination = (
+            sum(m["hallucination_score"] for m in self.metrics_history) / total
+        )
 
         return {
-            'total_queries': total,
-            'average_latency_ms': avg_latency,
-            'success_rate': (successful / total) * 100,
-            'rag_usage_rate': (rag_used / total) * 100,
-            'average_hallucination_score': avg_hallucination
+            "total_queries": total,
+            "average_latency_ms": avg_latency,
+            "success_rate": (successful / total) * 100,
+            "rag_usage_rate": (rag_used / total) * 100,
+            "average_hallucination_score": avg_hallucination,
         }
 
     def clear_history(self):
@@ -198,13 +206,17 @@ class MetricsTracker:
             response: The assistant response the feedback applies to
             liked: True for thumbs up, False for thumbs down
         """
-        self.feedback_history.append({
-            'query': query,
-            'response': response,
-            'liked': liked,
-            'timestamp': time.time()
-        })
-        logger.info(f"Feedback recorded: {'up' if liked else 'down'} for query: {query[:50]}")
+        self.feedback_history.append(
+            {
+                "query": query,
+                "response": response,
+                "liked": liked,
+                "timestamp": time.time(),
+            }
+        )
+        logger.info(
+            f"Feedback recorded: {'up' if liked else 'down'} for query: {query[:50]}"
+        )
 
     def get_feedback_summary(self) -> Dict[str, Any]:
         """
@@ -215,14 +227,14 @@ class MetricsTracker:
         """
         total = len(self.feedback_history)
         if total == 0:
-            return {'total_feedback': 0, 'likes': 0, 'dislikes': 0, 'like_rate': 0}
+            return {"total_feedback": 0, "likes": 0, "dislikes": 0, "like_rate": 0}
 
-        likes = sum(1 for f in self.feedback_history if f['liked'])
+        likes = sum(1 for f in self.feedback_history if f["liked"])
         return {
-            'total_feedback': total,
-            'likes': likes,
-            'dislikes': total - likes,
-            'like_rate': (likes / total) * 100
+            "total_feedback": total,
+            "likes": likes,
+            "dislikes": total - likes,
+            "like_rate": (likes / total) * 100,
         }
 
     def format_comparison_display(self, window: int = 50) -> str:
@@ -249,15 +261,33 @@ No queries recorded yet. Run some queries to see performance metrics.
             return "No metrics available in the selected window."
 
         # Separate by mode if available
-        agentic_queries = [m for m in recent if 'agentic' in m.get('mode', '').lower() or
-                          any('Agent' in agent for agent in m.get('agents_executed', []))]
-        enhanced_queries = [m for m in recent if 'enhanced' in m.get('mode', '').lower() and m not in agentic_queries]
+        agentic_queries = [
+            m
+            for m in recent
+            if "agentic" in m.get("mode", "").lower()
+            or any("Agent" in agent for agent in m.get("agents_executed", []))
+        ]
+        enhanced_queries = [
+            m
+            for m in recent
+            if "enhanced" in m.get("mode", "").lower() and m not in agentic_queries
+        ]
 
         # Calculate overall stats
         total_queries = len(recent)
-        avg_latency = sum(m['latency_ms'] for m in recent) / total_queries if recent else 0
-        success_rate = sum(1 for m in recent if m['success']) / total_queries * 100 if recent else 0
-        rag_usage = sum(1 for m in recent if m['rag_used']) / total_queries * 100 if recent else 0
+        avg_latency = (
+            sum(m["latency_ms"] for m in recent) / total_queries if recent else 0
+        )
+        success_rate = (
+            sum(1 for m in recent if m["success"]) / total_queries * 100
+            if recent
+            else 0
+        )
+        rag_usage = (
+            sum(1 for m in recent if m["rag_used"]) / total_queries * 100
+            if recent
+            else 0
+        )
 
         output = f"""## Performance Metrics (Last {len(recent)} Queries)
 
@@ -272,9 +302,17 @@ No queries recorded yet. Run some queries to see performance metrics.
 
         # Mode comparison if both modes have queries
         if agentic_queries and enhanced_queries:
-            agentic_avg = sum(m['latency_ms'] for m in agentic_queries) / len(agentic_queries)
-            enhanced_avg = sum(m['latency_ms'] for m in enhanced_queries) / len(enhanced_queries)
-            improvement = ((enhanced_avg - agentic_avg) / enhanced_avg) * 100 if enhanced_avg > 0 else 0
+            agentic_avg = sum(m["latency_ms"] for m in agentic_queries) / len(
+                agentic_queries
+            )
+            enhanced_avg = sum(m["latency_ms"] for m in enhanced_queries) / len(
+                enhanced_queries
+            )
+            improvement = (
+                ((enhanced_avg - agentic_avg) / enhanced_avg) * 100
+                if enhanced_avg > 0
+                else 0
+            )
 
             output += f"""### Mode Comparison
 
@@ -306,17 +344,21 @@ No queries recorded yet. Run some queries to see performance metrics.
         output += "### Recent Queries\n\n"
         for i, metric in enumerate(recent[-10:], 1):  # Show last 10
             mode_icon = "🤖" if metric in agentic_queries else "✨"
-            success_icon = "✅" if metric['success'] else "❌"
-            rag_icon = "📚" if metric['rag_used'] else "💾"
+            success_icon = "✅" if metric["success"] else "❌"
+            rag_icon = "📚" if metric["rag_used"] else "💾"
 
-            query_text = metric['query'][:50] + "..." if len(metric['query']) > 50 else metric['query']
+            query_text = (
+                metric["query"][:50] + "..."
+                if len(metric["query"]) > 50
+                else metric["query"]
+            )
 
             output += f"{i}. {mode_icon} {success_icon} **{query_text}** - {metric['latency_ms']:.0f}ms {rag_icon}\n"
 
         output += f"\n*Showing last 10 of {len(recent)} queries*\n"
 
         feedback = self.get_feedback_summary()
-        if feedback['total_feedback'] > 0:
+        if feedback["total_feedback"] > 0:
             output += f"""
 ---
 
@@ -354,10 +396,12 @@ if __name__ == "__main__":
     tracker = get_metrics_tracker()
 
     # Simulate a query
-    query_id = tracker.start_query("What is the delivery delay rate?", mode='agentic')
+    query_id = tracker.start_query("What is the delivery delay rate?", mode="agentic")
     tracker.add_agent_execution(query_id, "Delay Agent", used_rag=False)
     tracker.add_data_source(query_id, "analytics_engine")
-    tracker.calculate_hallucination_score(query_id, "The delay rate is 6.28%", ground_truth_data={'analytics': True})
+    tracker.calculate_hallucination_score(
+        query_id, "The delay rate is 6.28%", ground_truth_data={"analytics": True}
+    )
     tracker.end_query(query_id, success=True)
 
     # Get metrics

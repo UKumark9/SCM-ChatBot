@@ -12,10 +12,12 @@ from datetime import datetime
 import pandas as pd
 
 import matplotlib
-matplotlib.use('Agg')
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from ui_formatter import UIFormatter
+from scm_chatbot.ui.ui_formatter import UIFormatter
+from scm_chatbot.llm.guardrails import AGENT_SAFETY_CLAUSE
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +26,7 @@ try:
     from langchain_core.tools import Tool
     from langchain_core.prompts import ChatPromptTemplate
     from langchain.agents import AgentExecutor, create_tool_calling_agent
+
     LANGCHAIN_AVAILABLE = True
 except ImportError:
     LANGCHAIN_AVAILABLE = False
@@ -34,35 +37,37 @@ class DataQueryAgent:
     """Specialized agent for querying and retrieving specific data records"""
 
     # Chart theme constants (dark theme matching ForecastingEngine)
-    CHART_BG = '#1e293b'
-    CHART_TEXT = '#f1f5f9'
-    CHART_GRID = '#334155'
-    CHART_PRIMARY = '#6366f1'
+    CHART_BG = "#1e293b"
+    CHART_TEXT = "#f1f5f9"
+    CHART_GRID = "#334155"
+    CHART_PRIMARY = "#6366f1"
 
     # User-friendly column name mapping
     COLUMN_NAMES = {
-        'order_id': 'Order ID',
-        'customer_id': 'Customer ID',
-        'order_purchase_timestamp': 'Purchase Date',
-        'order_delivered_timestamp': 'Delivered Date',
-        'order_delivered_customer_date': 'Delivered Date',
-        'order_estimated_delivery_date': 'Estimated Delivery',
-        'customer_state': 'State',
-        'customer_city': 'City',
-        'product_id': 'Product ID',
-        'product_category_name': 'Category',
-        'price': 'Price',
-        'payment_value': 'Payment Amount',
-        'delay_days': 'Delay (Days)',
-        'is_delayed': 'Delayed',
-        'is_on_time': 'On-Time',
-        'total_sold': 'Units Sold',
-        'total_revenue': 'Total Revenue',
-        'order_month': 'Month',
-        'order_status': 'Status'
+        "order_id": "Order ID",
+        "customer_id": "Customer ID",
+        "order_purchase_timestamp": "Purchase Date",
+        "order_delivered_timestamp": "Delivered Date",
+        "order_delivered_customer_date": "Delivered Date",
+        "order_estimated_delivery_date": "Estimated Delivery",
+        "customer_state": "State",
+        "customer_city": "City",
+        "product_id": "Product ID",
+        "product_category_name": "Category",
+        "price": "Price",
+        "payment_value": "Payment Amount",
+        "delay_days": "Delay (Days)",
+        "is_delayed": "Delayed",
+        "is_on_time": "On-Time",
+        "total_sold": "Units Sold",
+        "total_revenue": "Total Revenue",
+        "order_month": "Month",
+        "order_status": "Status",
     }
 
-    def __init__(self, data_wrapper, llm_client=None, use_langchain: bool = True, rag_module=None):
+    def __init__(
+        self, data_wrapper, llm_client=None, use_langchain: bool = True, rag_module=None
+    ):
         """
         Initialize Data Query Agent
 
@@ -83,21 +88,28 @@ class DataQueryAgent:
         if self.use_langchain and llm_client:
             self._initialize_langchain_agent()
 
-        logger.info(f"Data Query Agent initialized (LangChain: {self.use_langchain}, RAG: {rag_module is not None})")
+        logger.info(
+            f"Data Query Agent initialized (LangChain: {self.use_langchain}, RAG: {rag_module is not None})"
+        )
 
     # ── Helper methods ──────────────────────────────────────────────────────
 
     @staticmethod
     def _friendly_column_name(col: str) -> str:
         """Convert technical column name to user-friendly display name."""
-        return DataQueryAgent.COLUMN_NAMES.get(col, col.replace('_', ' ').title())
+        return DataQueryAgent.COLUMN_NAMES.get(col, col.replace("_", " ").title())
 
     # ── Chart generation helpers ────────────────────────────────────────────
 
     def _generate_bar_chart(
-        self, labels: list, values: list, title: str,
-        xlabel: str, ylabel: str, color: str = None,
-        horizontal: bool = False
+        self,
+        labels: list,
+        values: list,
+        title: str,
+        xlabel: str,
+        ylabel: str,
+        color: str = None,
+        horizontal: bool = False,
     ) -> str:
         """Generate bar chart (vertical or horizontal) — returns base64 PNG."""
         if color is None:
@@ -105,55 +117,69 @@ class DataQueryAgent:
 
         fig, ax = plt.subplots(
             figsize=(10, max(4, len(labels) * 0.5)) if horizontal else (10, 5),
-            facecolor=self.CHART_BG
+            facecolor=self.CHART_BG,
         )
         ax.set_facecolor(self.CHART_BG)
 
         if horizontal:
-            bars = ax.barh(labels, values, color=color, height=0.6, edgecolor='none')
+            bars = ax.barh(labels, values, color=color, height=0.6, edgecolor="none")
             ax.set_xlabel(xlabel, color=self.CHART_TEXT, fontsize=11)
             v_max = max(values) if values else 1
             for bar, val in zip(bars, values):
                 ax.text(
                     bar.get_width() + v_max * 0.02,
                     bar.get_y() + bar.get_height() / 2,
-                    f'{val:,.0f}', va='center',
-                    color=self.CHART_TEXT, fontweight='bold', fontsize=10
+                    f"{val:,.0f}",
+                    va="center",
+                    color=self.CHART_TEXT,
+                    fontweight="bold",
+                    fontsize=10,
                 )
             ax.set_xlim(0, v_max * 1.18)
-            ax.grid(True, alpha=0.15, color=self.CHART_GRID, axis='x')
+            ax.grid(True, alpha=0.15, color=self.CHART_GRID, axis="x")
         else:
-            bars = ax.bar(labels, values, color=color, width=0.6, edgecolor='none')
+            bars = ax.bar(labels, values, color=color, width=0.6, edgecolor="none")
             ax.set_ylabel(ylabel, color=self.CHART_TEXT, fontsize=11)
             v_max = max(values) if values else 1
             for bar, val in zip(bars, values):
                 ax.text(
                     bar.get_x() + bar.get_width() / 2,
                     bar.get_height() + v_max * 0.02,
-                    f'{val:,.0f}', ha='center', va='bottom',
-                    color=self.CHART_TEXT, fontweight='bold', fontsize=9
+                    f"{val:,.0f}",
+                    ha="center",
+                    va="bottom",
+                    color=self.CHART_TEXT,
+                    fontweight="bold",
+                    fontsize=9,
                 )
             ax.set_ylim(0, v_max * 1.18)
-            ax.grid(True, alpha=0.15, color=self.CHART_GRID, axis='y')
+            ax.grid(True, alpha=0.15, color=self.CHART_GRID, axis="y")
             if len(labels) > 10:
                 fig.autofmt_xdate(rotation=45)
 
-        ax.set_title(title, color=self.CHART_TEXT, fontsize=13,
-                     fontweight='bold', pad=16)
+        ax.set_title(
+            title, color=self.CHART_TEXT, fontsize=13, fontweight="bold", pad=16
+        )
         ax.tick_params(colors=self.CHART_TEXT, labelsize=9)
 
-        for spine in ['top', 'right']:
+        for spine in ["top", "right"]:
             ax.spines[spine].set_visible(False)
-        for spine in ['left', 'bottom']:
+        for spine in ["left", "bottom"]:
             ax.spines[spine].set_color(self.CHART_GRID)
 
         plt.tight_layout()
 
         buf = io.BytesIO()
-        fig.savefig(buf, format='png', dpi=120, bbox_inches='tight',
-                    facecolor=self.CHART_BG, edgecolor='none')
+        fig.savefig(
+            buf,
+            format="png",
+            dpi=120,
+            bbox_inches="tight",
+            facecolor=self.CHART_BG,
+            edgecolor="none",
+        )
         buf.seek(0)
-        img_b64 = base64.b64encode(buf.read()).decode('utf-8')
+        img_b64 = base64.b64encode(buf.read()).decode("utf-8")
         plt.close(fig)
         return img_b64
 
@@ -166,31 +192,50 @@ class DataQueryAgent:
 
         if colors is None:
             colors = [
-                '#10b981', '#ef4444', '#f59e0b', '#6366f1', '#06b6d4',
-                '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#84cc16'
+                "#10b981",
+                "#ef4444",
+                "#f59e0b",
+                "#6366f1",
+                "#06b6d4",
+                "#8b5cf6",
+                "#ec4899",
+                "#14b8a6",
+                "#f97316",
+                "#84cc16",
             ]
 
         wedges, texts, autotexts = ax.pie(
-            values, labels=labels, colors=colors[:len(values)],
-            autopct='%1.1f%%', startangle=90, pctdistance=0.78,
-            textprops={'color': self.CHART_TEXT, 'fontsize': 10},
-            wedgeprops={'edgecolor': self.CHART_BG, 'linewidth': 1.5}
+            values,
+            labels=labels,
+            colors=colors[: len(values)],
+            autopct="%1.1f%%",
+            startangle=90,
+            pctdistance=0.78,
+            textprops={"color": self.CHART_TEXT, "fontsize": 10},
+            wedgeprops={"edgecolor": self.CHART_BG, "linewidth": 1.5},
         )
 
         for autotext in autotexts:
-            autotext.set_fontweight('bold')
+            autotext.set_fontweight("bold")
             autotext.set_fontsize(11)
 
-        ax.set_title(title, color=self.CHART_TEXT, fontsize=13,
-                     fontweight='bold', pad=18)
+        ax.set_title(
+            title, color=self.CHART_TEXT, fontsize=13, fontweight="bold", pad=18
+        )
 
         plt.tight_layout()
 
         buf = io.BytesIO()
-        fig.savefig(buf, format='png', dpi=120, bbox_inches='tight',
-                    facecolor=self.CHART_BG, edgecolor='none')
+        fig.savefig(
+            buf,
+            format="png",
+            dpi=120,
+            bbox_inches="tight",
+            facecolor=self.CHART_BG,
+            edgecolor="none",
+        )
         buf.seek(0)
-        img_b64 = base64.b64encode(buf.read()).decode('utf-8')
+        img_b64 = base64.b64encode(buf.read()).decode("utf-8")
         plt.close(fig)
         return img_b64
 
@@ -199,19 +244,17 @@ class DataQueryAgent:
     def _extract_order_id(self, text: str) -> Optional[str]:
         """Extract order ID from text using regex patterns."""
         # Match 12-char alphanumeric IDs (Olist format like Axfy13Hk4PIk)
-        match = re.search(r'\b[a-zA-Z0-9]{12}\b', text)
+        match = re.search(r"\b[a-zA-Z0-9]{12}\b", text)
         if not match:
             # Fallback: try 32-char hex IDs (UUID format)
-            match = re.search(r'\b[a-f0-9]{32}\b', text.lower())
+            match = re.search(r"\b[a-f0-9]{32}\b", text.lower())
         return match.group() if match else None
 
-    def _extract_limit(
-        self, text: str, default: int = 10, max_limit: int = 50
-    ) -> int:
+    def _extract_limit(self, text: str, default: int = 10, max_limit: int = 50) -> int:
         """Extract limit/top-N from text like 'top 10' or 'best 5'."""
         match = re.search(
-            r'top\s+(\d+)|(\d+)\s+(?:products|categories|items)|limit\s+(\d+)',
-            text.lower()
+            r"top\s+(\d+)|(\d+)\s+(?:products|categories|items)|limit\s+(\d+)",
+            text.lower(),
         )
         if match:
             limit = int(match.group(1) or match.group(2) or match.group(3))
@@ -223,54 +266,66 @@ class DataQueryAgent:
         # Brazilian state name to code mapping
         # Organize by length to match longer names first (e.g., "rio de janeiro" before "rio")
         state_map = {
-            'rio de janeiro': 'RJ',
-            'rio grande do sul': 'RS',
-            'rio grande do norte': 'RN',
-            'mato grosso do sul': 'MS',
-            'espírito santo': 'ES', 'espirito santo': 'ES',
-            'santa catarina': 'SC',
-            'mato grosso': 'MT',
-            'minas gerais': 'MG',
-            'são paulo': 'SP', 'sao paulo': 'SP',
-            'pernambuco': 'PE',
-            'tocantins': 'TO',
-            'sergipe': 'SE',
-            'roraima': 'RR',
-            'rondônia': 'RO', 'rondonia': 'RO',
-            'piauí': 'PI', 'piaui': 'PI',
-            'paraíba': 'PB', 'paraiba': 'PB',
-            'maranhão': 'MA', 'maranhao': 'MA',
-            'amazonas': 'AM',
-            'goiás': 'GO', 'goias': 'GO',
-            'ceará': 'CE', 'ceara': 'CE',
-            'brasília': 'DF', 'brasilia': 'DF',
-            'bahia': 'BA',
-            'paraná': 'PR', 'parana': 'PR',
-            'pará': 'PA', 'para': 'PA',
-            'alagoas': 'AL',
-            'amapá': 'AP', 'amapa': 'AP',
-            'minas': 'MG',
-            'acre': 'AC',
-            'rio': 'RJ',
+            "rio de janeiro": "RJ",
+            "rio grande do sul": "RS",
+            "rio grande do norte": "RN",
+            "mato grosso do sul": "MS",
+            "espírito santo": "ES",
+            "espirito santo": "ES",
+            "santa catarina": "SC",
+            "mato grosso": "MT",
+            "minas gerais": "MG",
+            "são paulo": "SP",
+            "sao paulo": "SP",
+            "pernambuco": "PE",
+            "tocantins": "TO",
+            "sergipe": "SE",
+            "roraima": "RR",
+            "rondônia": "RO",
+            "rondonia": "RO",
+            "piauí": "PI",
+            "piaui": "PI",
+            "paraíba": "PB",
+            "paraiba": "PB",
+            "maranhão": "MA",
+            "maranhao": "MA",
+            "amazonas": "AM",
+            "goiás": "GO",
+            "goias": "GO",
+            "ceará": "CE",
+            "ceara": "CE",
+            "brasília": "DF",
+            "brasilia": "DF",
+            "bahia": "BA",
+            "paraná": "PR",
+            "parana": "PR",
+            "pará": "PA",
+            "para": "PA",
+            "alagoas": "AL",
+            "amapá": "AP",
+            "amapa": "AP",
+            "minas": "MG",
+            "acre": "AC",
+            "rio": "RJ",
         }
 
         text_lower = text.lower()
 
         # First try multi-word state names (they can use substring matching)
         for key, code in state_map.items():
-            if ' ' in key:  # Multi-word names like "rio de janeiro"
+            if " " in key:  # Multi-word names like "rio de janeiro"
                 if key in text_lower:
                     return code
 
         # Then try single-word state names with word boundary matching
         for key, code in state_map.items():
-            if ' ' not in key:  # Single-word names like "rio", "minas"
+            if " " not in key:  # Single-word names like "rio", "minas"
                 # Use word boundary matching to avoid matching "states" → "es"
-                if re.search(rf'\b{re.escape(key)}\b', text_lower):
+                if re.search(rf"\b{re.escape(key)}\b", text_lower):
                     return code
 
         # Finally, try 2-letter uppercase codes with strict word boundaries
-        match = re.search(r'\b([A-Z]{2})\b', text)
+        match = re.search(r"\b([A-Z]{2})\b", text)
         return match.group(1) if match else None
 
     def _parse_date_range(self, text: str) -> Tuple[Optional[str], Optional[str]]:
@@ -279,71 +334,86 @@ class DataQueryAgent:
 
         # Handle specific months like "January 2024"
         month_match = re.search(
-            r'(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{4})',
-            text_lower
+            r"(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{4})",
+            text_lower,
         )
         if month_match:
             month_name = month_match.group(1)
             year = month_match.group(2)
             month_num = {
-                'january': 1, 'february': 2, 'march': 3, 'april': 4,
-                'may': 5, 'june': 6, 'july': 7, 'august': 8,
-                'september': 9, 'october': 10, 'november': 11, 'december': 12
+                "january": 1,
+                "february": 2,
+                "march": 3,
+                "april": 4,
+                "may": 5,
+                "june": 6,
+                "july": 7,
+                "august": 8,
+                "september": 9,
+                "october": 10,
+                "november": 11,
+                "december": 12,
             }[month_name]
             start = pd.Timestamp(year=int(year), month=month_num, day=1)
             end = start + pd.offsets.MonthEnd(0)
-            return start.strftime('%Y-%m-%d'), end.strftime('%Y-%m-%d')
+            return start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
 
         # Handle quarters like "Q1 2024"
-        quarter_match = re.search(r'q([1-4])\s+(\d{4})', text_lower)
+        quarter_match = re.search(r"q([1-4])\s+(\d{4})", text_lower)
         if quarter_match:
             quarter = int(quarter_match.group(1))
             year = int(quarter_match.group(2))
             start_month = (quarter - 1) * 3 + 1
             start = pd.Timestamp(year=year, month=start_month, day=1)
             end = start + pd.offsets.QuarterEnd(0)
-            return start.strftime('%Y-%m-%d'), end.strftime('%Y-%m-%d')
+            return start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
 
         # Handle year like "2024" or "in 2024"
-        year_match = re.search(r'\b(20\d{2})\b', text_lower)
-        if year_match and 'from' not in text_lower and 'to' not in text_lower:
+        year_match = re.search(r"\b(20\d{2})\b", text_lower)
+        if year_match and "from" not in text_lower and "to" not in text_lower:
             year = int(year_match.group(1))
-            return f'{year}-01-01', f'{year}-12-31'
+            return f"{year}-01-01", f"{year}-12-31"
 
         # Handle explicit ranges like "2024-01-01 to 2024-03-31"
         range_match = re.search(
-            r'(\d{4}-\d{2}-\d{2})\s+to\s+(\d{4}-\d{2}-\d{2})',
-            text_lower
+            r"(\d{4}-\d{2}-\d{2})\s+to\s+(\d{4}-\d{2}-\d{2})", text_lower
         )
         if range_match:
             return range_match.group(1), range_match.group(2)
 
         # Handle "from X to Y"
         from_to_match = re.search(
-            r'from\s+(\d{4}-\d{2}-\d{2})\s+to\s+(\d{4}-\d{2}-\d{2})',
-            text_lower
+            r"from\s+(\d{4}-\d{2}-\d{2})\s+to\s+(\d{4}-\d{2}-\d{2})", text_lower
         )
         if from_to_match:
             return from_to_match.group(1), from_to_match.group(2)
 
         # Handle "between X and Y" with ISO dates
         between_match = re.search(
-            r'between\s+(\d{4}-\d{2}-\d{2})\s+and\s+(\d{4}-\d{2}-\d{2})',
-            text_lower
+            r"between\s+(\d{4}-\d{2}-\d{2})\s+and\s+(\d{4}-\d{2}-\d{2})", text_lower
         )
         if between_match:
             return between_match.group(1), between_match.group(2)
 
         # Handle "between Month Day Year and Month Day Year" (e.g., "between January 1 2024 and March 31 2024")
         between_named_match = re.search(
-            r'between\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})\s+(\d{4})\s+and\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})\s+(\d{4})',
-            text_lower
+            r"between\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})\s+(\d{4})\s+and\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})\s+(\d{4})",
+            text_lower,
         )
         if between_named_match:
             month_map = {
-                'january': 1, 'february': 2, 'march': 3, 'april': 4,
-                'may': 5, 'june': 6, 'july': 7, 'august': 8,
-                'september': 9, 'october': 10, 'november': 11, 'december': 12
+                "january": 1,
+                "february": 2,
+                "march": 3,
+                "april": 4,
+                "may": 5,
+                "june": 6,
+                "july": 7,
+                "august": 8,
+                "september": 9,
+                "october": 10,
+                "november": 11,
+                "december": 12,
             }
             start_month = month_map[between_named_match.group(1)]
             start_day = int(between_named_match.group(2))
@@ -352,8 +422,8 @@ class DataQueryAgent:
             end_day = int(between_named_match.group(5))
             end_year = int(between_named_match.group(6))
 
-            start_date = f'{start_year:04d}-{start_month:02d}-{start_day:02d}'
-            end_date = f'{end_year:04d}-{end_month:02d}-{end_day:02d}'
+            start_date = f"{start_year:04d}-{start_month:02d}-{start_day:02d}"
+            end_date = f"{end_year:04d}-{end_month:02d}-{end_day:02d}"
             return start_date, end_date
 
         return None, None
@@ -369,7 +439,7 @@ class DataQueryAgent:
 
         try:
             # Find the order
-            order = self.data.orders[self.data.orders['order_id'] == order_id]
+            order = self.data.orders[self.data.orders["order_id"] == order_id]
 
             if order.empty:
                 return f"**No order found** with ID: `{order_id}`"
@@ -377,11 +447,11 @@ class DataQueryAgent:
             order_row = order.iloc[0]
 
             # Get order items
-            items = self.data.order_items[self.data.order_items['order_id'] == order_id]
+            items = self.data.order_items[self.data.order_items["order_id"] == order_id]
 
             # Get payment info
-            payment = self.data.payments[self.data.payments['order_id'] == order_id]
-            total_payment = payment['payment_value'].sum() if not payment.empty else 0
+            payment = self.data.payments[self.data.payments["order_id"] == order_id]
+            total_payment = payment["payment_value"].sum() if not payment.empty else 0
 
             # Build response
             response = f"## Order Details: `{order_id}`\n\n"
@@ -391,13 +461,16 @@ class DataQueryAgent:
             response += f"- **{self._friendly_column_name('customer_state')}**: {order_row.get('customer_state', 'N/A')}\n\n"
 
             response += "### Delivery Status\n"
-            delivered_date = order_row.get('order_delivered_timestamp', order_row.get('order_delivered_customer_date', 'Not delivered'))
-            estimated_date = order_row.get('order_estimated_delivery_date', 'N/A')
+            delivered_date = order_row.get(
+                "order_delivered_timestamp",
+                order_row.get("order_delivered_customer_date", "Not delivered"),
+            )
+            estimated_date = order_row.get("order_estimated_delivery_date", "N/A")
             response += f"- **{self._friendly_column_name('order_delivered_customer_date')}**: {delivered_date}\n"
             response += f"- **{self._friendly_column_name('order_estimated_delivery_date')}**: {estimated_date}\n"
 
-            if 'delay_days' in order_row and pd.notna(order_row['delay_days']):
-                delay_days = int(order_row['delay_days'])
+            if "delay_days" in order_row and pd.notna(order_row["delay_days"]):
+                delay_days = int(order_row["delay_days"])
                 if delay_days > 0:
                     response += f"- **Status**: **Delayed** by {delay_days} days\n"
                 else:
@@ -429,32 +502,38 @@ class DataQueryAgent:
         try:
             # Merge order_items with products
             items_products = self.data.order_items.merge(
-                self.data.products[['product_id', 'product_category_name']],
-                on='product_id',
-                how='left'
+                self.data.products[["product_id", "product_category_name"]],
+                on="product_id",
+                how="left",
             )
 
             # Group by product and count sales
-            product_sales = items_products.groupby('product_id').agg({
-                'product_id': 'count',
-                'price': 'sum',
-                'product_category_name': 'first'
-            }).rename(columns={'product_id': 'total_sold', 'price': 'total_revenue'})
+            product_sales = (
+                items_products.groupby("product_id")
+                .agg(
+                    {
+                        "product_id": "count",
+                        "price": "sum",
+                        "product_category_name": "first",
+                    }
+                )
+                .rename(columns={"product_id": "total_sold", "price": "total_revenue"})
+            )
 
             # Sort and get top N
-            top_products = product_sales.nlargest(limit, 'total_sold')
+            top_products = product_sales.nlargest(limit, "total_sold")
 
             # Generate bar chart
             labels = [f"{pid[:8]}..." for pid in top_products.index]
-            values = top_products['total_sold'].tolist()
+            values = top_products["total_sold"].tolist()
 
             chart_b64 = self._generate_bar_chart(
                 labels=list(reversed(labels)),
                 values=list(reversed(values)),
-                title=f'Top {limit} Products by Sales Volume',
-                xlabel='Units Sold',
-                ylabel='',
-                horizontal=True
+                title=f"Top {limit} Products by Sales Volume",
+                xlabel="Units Sold",
+                ylabel="",
+                horizontal=True,
             )
 
             self._pending_chart = chart_b64
@@ -466,7 +545,11 @@ class DataQueryAgent:
             response += "|---|---|---|---|---|\n"
 
             for i, (pid, row) in enumerate(top_products.iterrows(), 1):
-                category = row['product_category_name'] if pd.notna(row['product_category_name']) else 'Unknown'
+                category = (
+                    row["product_category_name"]
+                    if pd.notna(row["product_category_name"])
+                    else "Unknown"
+                )
                 response += f"| {i} | {pid[:16]}... | {category[:20]} | {int(row['total_sold']):,} | R$ {row['total_revenue']:,.2f} |\n"
 
             return response
@@ -482,29 +565,33 @@ class DataQueryAgent:
         try:
             # Merge order_items with products
             items_products = self.data.order_items.merge(
-                self.data.products[['product_id', 'product_category_name']],
-                on='product_id',
-                how='left'
+                self.data.products[["product_id", "product_category_name"]],
+                on="product_id",
+                how="left",
             )
 
             # Group by category
-            category_sales = items_products.groupby('product_category_name').agg({
-                'product_id': 'count',
-                'price': 'sum'
-            }).rename(columns={'product_id': 'total_sold', 'price': 'total_revenue'})
+            category_sales = (
+                items_products.groupby("product_category_name")
+                .agg({"product_id": "count", "price": "sum"})
+                .rename(columns={"product_id": "total_sold", "price": "total_revenue"})
+            )
 
             # Remove nulls and sort
             category_sales = category_sales[category_sales.index.notna()]
-            top_categories = category_sales.nlargest(limit, 'total_sold')
+            top_categories = category_sales.nlargest(limit, "total_sold")
 
             # Generate pie chart
-            labels = [cat[:20] if isinstance(cat, str) else str(cat)[:20] for cat in top_categories.index]
-            values = top_categories['total_sold'].tolist()
+            labels = [
+                cat[:20] if isinstance(cat, str) else str(cat)[:20]
+                for cat in top_categories.index
+            ]
+            values = top_categories["total_sold"].tolist()
 
             pie_b64 = self._generate_pie_chart(
                 labels=labels,
                 values=values,
-                title=f'Top {limit} Categories by Sales Distribution'
+                title=f"Top {limit} Categories by Sales Distribution",
             )
 
             self._pending_chart = pie_b64
@@ -529,7 +616,7 @@ class DataQueryAgent:
         """List all unique product categories in user-readable format."""
         try:
             # Get all unique categories from products
-            categories = self.data.products['product_category_name'].dropna().unique()
+            categories = self.data.products["product_category_name"].dropna().unique()
             categories = sorted(categories)  # Sort alphabetically
 
             total_categories = len(categories)
@@ -540,7 +627,7 @@ class DataQueryAgent:
                 if pd.isna(cat_name):
                     return "Unknown"
                 # Replace underscores with spaces and title case each word
-                formatted = cat_name.replace('_', ' ').title()
+                formatted = cat_name.replace("_", " ").title()
                 return formatted
 
             # Build response
@@ -568,7 +655,9 @@ class DataQueryAgent:
                 if right_idx < len(formatted_categories):
                     right_num = right_idx + 1
                     right_cat = formatted_categories[right_idx]
-                    response += f"| {left_num} | {left_cat} | {right_num} | {right_cat} |\n"
+                    response += (
+                        f"| {left_num} | {left_cat} | {right_num} | {right_cat} |\n"
+                    )
                 else:
                     response += f"| {left_num} | {left_cat} | | |\n"
 
@@ -586,9 +675,13 @@ class DataQueryAgent:
             orders = self.data.orders.copy()
 
             # Ensure timestamp column exists
-            date_col = 'order_purchase_timestamp'
+            date_col = "order_purchase_timestamp"
             if date_col not in orders.columns:
-                date_col = 'purchase_timestamp' if 'purchase_timestamp' in orders.columns else None
+                date_col = (
+                    "purchase_timestamp"
+                    if "purchase_timestamp" in orders.columns
+                    else None
+                )
 
             if date_col is None:
                 return "**Error**: No purchase timestamp column found in orders data."
@@ -600,7 +693,9 @@ class DataQueryAgent:
             if start_date and end_date:
                 start_dt = pd.to_datetime(start_date)
                 end_dt = pd.to_datetime(end_date)
-                filtered_orders = orders[(orders[date_col] >= start_dt) & (orders[date_col] <= end_dt)]
+                filtered_orders = orders[
+                    (orders[date_col] >= start_dt) & (orders[date_col] <= end_dt)
+                ]
                 title_suffix = f"{start_date} to {end_date}"
             elif start_date:
                 start_dt = pd.to_datetime(start_date)
@@ -614,8 +709,8 @@ class DataQueryAgent:
                 return f"**No orders found** in the specified date range."
 
             # Group by month
-            filtered_orders['month'] = filtered_orders[date_col].dt.to_period('M')
-            monthly_counts = filtered_orders.groupby('month').size()
+            filtered_orders["month"] = filtered_orders[date_col].dt.to_period("M")
+            monthly_counts = filtered_orders.groupby("month").size()
 
             # Generate bar chart
             labels = [str(m) for m in monthly_counts.index]
@@ -624,10 +719,10 @@ class DataQueryAgent:
             chart_b64 = self._generate_bar_chart(
                 labels=labels,
                 values=values,
-                title=f'Monthly Order Volume — {title_suffix}',
-                xlabel='Month',
-                ylabel='Orders',
-                horizontal=False
+                title=f"Monthly Order Volume — {title_suffix}",
+                xlabel="Month",
+                ylabel="Orders",
+                horizontal=False,
             )
 
             self._pending_chart = chart_b64
@@ -637,11 +732,15 @@ class DataQueryAgent:
             total_orders = len(filtered_orders)
 
             # Get payment total if available
-            if hasattr(self.data, 'payments'):
-                order_ids = filtered_orders['order_id'].unique()
-                payments = self.data.payments[self.data.payments['order_id'].isin(order_ids)]
-                total_revenue = payments['payment_value'].sum()
-                avg_order_value = total_revenue / total_orders if total_orders > 0 else 0
+            if hasattr(self.data, "payments"):
+                order_ids = filtered_orders["order_id"].unique()
+                payments = self.data.payments[
+                    self.data.payments["order_id"].isin(order_ids)
+                ]
+                total_revenue = payments["payment_value"].sum()
+                avg_order_value = (
+                    total_revenue / total_orders if total_orders > 0 else 0
+                )
             else:
                 total_revenue = 0
                 avg_order_value = 0
@@ -655,7 +754,9 @@ class DataQueryAgent:
             response += f"- **Date Range**: {filtered_orders[date_col].min().date()} to {filtered_orders[date_col].max().date()}\n\n"
 
             response += "### Monthly Breakdown\n\n"
-            response += f"| {self._friendly_column_name('order_month')} | Orders |\n|---|---|\n"
+            response += (
+                f"| {self._friendly_column_name('order_month')} | Orders |\n|---|---|\n"
+            )
             for month, count in monthly_counts.items():
                 response += f"| {month} | {count:,} |\n"
 
@@ -674,7 +775,7 @@ class DataQueryAgent:
 
             # Find state column
             state_col = None
-            for col in ['customer_state', 'state', 'customer_uf']:
+            for col in ["customer_state", "state", "customer_uf"]:
                 if col in customers.columns:
                     state_col = col
                     break
@@ -704,10 +805,10 @@ class DataQueryAgent:
                 chart_b64 = self._generate_bar_chart(
                     labels=labels,
                     values=values,
-                    title='Top 10 States by Customer Count',
-                    xlabel='Customers',
-                    ylabel='',
-                    horizontal=True
+                    title="Top 10 States by Customer Count",
+                    xlabel="Customers",
+                    ylabel="",
+                    horizontal=True,
                 )
 
                 self._pending_chart = chart_b64
@@ -732,13 +833,18 @@ class DataQueryAgent:
             orders = self.data.orders.copy()
 
             # Count by status
-            if 'is_on_time' in orders.columns and 'is_delayed' in orders.columns:
-                on_time_count = int((orders['is_on_time'] == True).sum())
-                delayed_count = int((orders['is_delayed'] == True).sum())
+            if "is_on_time" in orders.columns and "is_delayed" in orders.columns:
+                on_time_count = int((orders["is_on_time"] == True).sum())
+                delayed_count = int((orders["is_delayed"] == True).sum())
                 pending_count = len(orders) - on_time_count - delayed_count
             else:
                 # Fallback: check if delivered
-                delivered = orders[orders.get('order_delivered_timestamp', orders.get('order_delivered_customer_date')).notna()]
+                delivered = orders[
+                    orders.get(
+                        "order_delivered_timestamp",
+                        orders.get("order_delivered_customer_date"),
+                    ).notna()
+                ]
                 on_time_count = len(delivered)
                 delayed_count = 0
                 pending_count = len(orders) - on_time_count
@@ -751,25 +857,25 @@ class DataQueryAgent:
             colors = []
 
             if on_time_count > 0:
-                labels.append(f'On-Time ({on_time_count:,})')
+                labels.append(f"On-Time ({on_time_count:,})")
                 values.append(on_time_count)
-                colors.append('#10b981')
+                colors.append("#10b981")
 
             if delayed_count > 0:
-                labels.append(f'Delayed ({delayed_count:,})')
+                labels.append(f"Delayed ({delayed_count:,})")
                 values.append(delayed_count)
-                colors.append('#ef4444')
+                colors.append("#ef4444")
 
             if pending_count > 0:
-                labels.append(f'Pending ({pending_count:,})')
+                labels.append(f"Pending ({pending_count:,})")
                 values.append(pending_count)
-                colors.append('#f59e0b')
+                colors.append("#f59e0b")
 
             pie_b64 = self._generate_pie_chart(
                 labels=labels,
                 values=values,
-                title='Order Delivery Status Breakdown',
-                colors=colors
+                title="Order Delivery Status Breakdown",
+                colors=colors,
             )
 
             self._pending_chart = pie_b64
@@ -804,17 +910,21 @@ class DataQueryAgent:
             orders = self.data.orders.copy()
 
             # Use order_month if available (precomputed in main.py)
-            if 'order_month' in orders.columns:
-                monthly_counts = orders.groupby('order_month').size().sort_index()
+            if "order_month" in orders.columns:
+                monthly_counts = orders.groupby("order_month").size().sort_index()
             else:
                 # Fallback: compute from timestamp
-                date_col = 'order_purchase_timestamp' if 'order_purchase_timestamp' in orders.columns else 'purchase_timestamp'
+                date_col = (
+                    "order_purchase_timestamp"
+                    if "order_purchase_timestamp" in orders.columns
+                    else "purchase_timestamp"
+                )
                 if date_col not in orders.columns:
                     return "**Error**: No purchase timestamp column found."
 
                 orders[date_col] = pd.to_datetime(orders[date_col])
-                orders['month'] = orders[date_col].dt.to_period('M')
-                monthly_counts = orders.groupby('month').size()
+                orders["month"] = orders[date_col].dt.to_period("M")
+                monthly_counts = orders.groupby("month").size()
 
             # Generate bar chart
             labels = [str(m) for m in monthly_counts.index]
@@ -823,10 +933,10 @@ class DataQueryAgent:
             chart_b64 = self._generate_bar_chart(
                 labels=labels,
                 values=values,
-                title='Monthly Order Trends',
-                xlabel='Month',
-                ylabel='Orders',
-                horizontal=False
+                title="Monthly Order Trends",
+                xlabel="Month",
+                ylabel="Orders",
+                horizontal=False,
             )
 
             self._pending_chart = chart_b64
@@ -863,10 +973,10 @@ class DataQueryAgent:
         """Get all orders for a specific customer."""
         # Extract customer ID - support both 12-char alphanumeric and 32-char hex formats
         # First try 32-char hex (order IDs)
-        match = re.search(r'\b[a-f0-9]{32}\b', query.lower())
+        match = re.search(r"\b[a-f0-9]{32}\b", query.lower())
         if not match:
             # Try 12-char alphanumeric (customer IDs like hCT0x9JiGXBQ)
-            match = re.search(r'\b[a-zA-Z0-9]{12}\b', query)
+            match = re.search(r"\b[a-zA-Z0-9]{12}\b", query)
 
         customer_id = match.group() if match else None
 
@@ -875,21 +985,29 @@ class DataQueryAgent:
 
         try:
             # Find orders for this customer
-            customer_orders = self.data.orders[self.data.orders['customer_id'] == customer_id]
+            customer_orders = self.data.orders[
+                self.data.orders["customer_id"] == customer_id
+            ]
 
             if customer_orders.empty:
                 return f"**No orders found** for customer ID: `{customer_id}`"
 
             # Sort by date
-            date_col = 'order_purchase_timestamp' if 'order_purchase_timestamp' in customer_orders.columns else 'purchase_timestamp'
+            date_col = (
+                "order_purchase_timestamp"
+                if "order_purchase_timestamp" in customer_orders.columns
+                else "purchase_timestamp"
+            )
             if date_col in customer_orders.columns:
                 customer_orders = customer_orders.sort_values(date_col)
 
             # Get payment totals if available
-            if hasattr(self.data, 'payments'):
-                order_ids = customer_orders['order_id'].unique()
-                payments = self.data.payments[self.data.payments['order_id'].isin(order_ids)]
-                payment_by_order = payments.groupby('order_id')['payment_value'].sum()
+            if hasattr(self.data, "payments"):
+                order_ids = customer_orders["order_id"].unique()
+                payments = self.data.payments[
+                    self.data.payments["order_id"].isin(order_ids)
+                ]
+                payment_by_order = payments.groupby("order_id")["payment_value"].sum()
             else:
                 payment_by_order = {}
 
@@ -897,7 +1015,7 @@ class DataQueryAgent:
             response = f"## Customer Order History: `{customer_id}`\n\n"
             response += f"- **Total Orders**: {len(customer_orders)}\n"
 
-            if hasattr(self.data, 'payments') and len(payment_by_order) > 0:
+            if hasattr(self.data, "payments") and len(payment_by_order) > 0:
                 total_spent = payment_by_order.sum()
                 avg_order_value = total_spent / len(customer_orders)
                 response += f"- **Total Spent**: R$ {total_spent:,.2f}\n"
@@ -907,14 +1025,14 @@ class DataQueryAgent:
             response += f"| {self._friendly_column_name('order_id')} | {self._friendly_column_name('order_purchase_timestamp')} | Status | {self._friendly_column_name('payment_value')} |\n|---|---|---|---|\n"
 
             for _, order in customer_orders.head(20).iterrows():
-                order_id = order['order_id']
-                date = order.get(date_col, 'N/A')
+                order_id = order["order_id"]
+                date = order.get(date_col, "N/A")
                 if pd.notna(date):
                     date = str(date)[:10]
 
-                if 'is_delayed' in order and order['is_delayed']:
+                if "is_delayed" in order and order["is_delayed"]:
                     status = "Delayed"
-                elif 'is_on_time' in order and order['is_on_time']:
+                elif "is_on_time" in order and order["is_on_time"]:
                     status = "On-time"
                 else:
                     status = "Pending"
@@ -922,7 +1040,9 @@ class DataQueryAgent:
                 payment = payment_by_order.get(order_id, 0)
                 payment_str = f"R$ {payment:,.2f}" if payment > 0 else "N/A"
 
-                response += f"| {order_id[:16]}... | {date} | {status} | {payment_str} |\n"
+                response += (
+                    f"| {order_id[:16]}... | {date} | {status} | {payment_str} |\n"
+                )
 
             if len(customer_orders) > 20:
                 response += f"\n*... and {len(customer_orders) - 20} more orders*\n"
@@ -943,22 +1063,22 @@ class DataQueryAgent:
                 Tool(
                     name="QueryOrders",
                     func=self._query_orders,
-                    description="Query order records - basic sample and count"
+                    description="Query order records - basic sample and count",
                 ),
                 Tool(
                     name="QueryCustomers",
                     func=self._query_customers,
-                    description="Query customer records - basic sample and count"
+                    description="Query customer records - basic sample and count",
                 ),
                 Tool(
                     name="QueryProducts",
                     func=self._query_products,
-                    description="Query product records - basic sample and count"
+                    description="Query product records - basic sample and count",
                 ),
                 Tool(
                     name="GetDataSummary",
                     func=self._get_data_summary,
-                    description="Get summary of available data and record counts"
+                    description="Get summary of available data and record counts",
                 ),
                 # NEW ENHANCED TOOLS
                 Tool(
@@ -968,7 +1088,7 @@ class DataQueryAgent:
                         "Find a specific order by order ID. Returns full order details including "
                         "order info, items, payment, and delivery status. Input format: provide order ID "
                         "as text (e.g., 'find order abc123' or just 'abc123')."
-                    )
+                    ),
                 ),
                 Tool(
                     name="GetTopProducts",
@@ -977,7 +1097,7 @@ class DataQueryAgent:
                         "Get top N products by sales volume with horizontal bar chart. Returns products "
                         "ranked by total items sold with revenue. Input format: 'top 10 products' or "
                         "'best selling products' (default: 10, max: 50)."
-                    )
+                    ),
                 ),
                 Tool(
                     name="GetTopCategories",
@@ -985,7 +1105,7 @@ class DataQueryAgent:
                     description=(
                         "Get top N product categories by sales with pie chart showing distribution. "
                         "Input format: 'top 5 categories' (default: 10, max: 20)."
-                    )
+                    ),
                 ),
                 Tool(
                     name="ListUniqueCategories",
@@ -994,7 +1114,7 @@ class DataQueryAgent:
                         "List all unique product categories. Returns a complete alphabetically sorted "
                         "list of all product categories in the database. Input format: 'list categories', "
                         "'unique categories', 'all categories'."
-                    )
+                    ),
                 ),
                 Tool(
                     name="FilterOrdersByDateRange",
@@ -1003,7 +1123,7 @@ class DataQueryAgent:
                         "Filter orders by date range or specific month with monthly breakdown bar chart. "
                         "Input formats: 'orders in January 2024', 'orders from 2024-01-01 to 2024-03-31', "
                         "'orders in Q1 2024', 'orders in 2023'."
-                    )
+                    ),
                 ),
                 Tool(
                     name="GetCustomersByState",
@@ -1012,7 +1132,7 @@ class DataQueryAgent:
                         "Get customers filtered by state with distribution bar chart. "
                         "Input format: 'customers in SP', 'customers in São Paulo'. "
                         "If no state specified, shows top 10 states distribution."
-                    )
+                    ),
                 ),
                 Tool(
                     name="GetOrderStatusBreakdown",
@@ -1020,7 +1140,7 @@ class DataQueryAgent:
                     description=(
                         "Get breakdown of orders by delivery status (on-time, delayed, pending) "
                         "with pie chart showing distribution."
-                    )
+                    ),
                 ),
                 Tool(
                     name="GetMonthlyOrderTrends",
@@ -1028,7 +1148,7 @@ class DataQueryAgent:
                     description=(
                         "Get monthly order trends and patterns with bar chart. Shows order volume "
                         "by month, growth rates, and peak months."
-                    )
+                    ),
                 ),
                 Tool(
                     name="GetCustomerOrderHistory",
@@ -1036,12 +1156,15 @@ class DataQueryAgent:
                     description=(
                         "Get all orders for a specific customer. Returns chronological list of orders "
                         "with dates, totals, and delivery status. Input format: provide customer ID."
-                    )
+                    ),
                 ),
             ]
 
-            prompt = ChatPromptTemplate.from_messages([
-                ("system", """You are a specialized Data Query Agent for supply chain management.
+            prompt = ChatPromptTemplate.from_messages(
+                [
+                    (
+                        "system",
+                        """You are a specialized Data Query Agent for supply chain management.
 
 Your expertise includes:
 - Finding specific orders by ID
@@ -1089,16 +1212,16 @@ PARAMETER PARSING:
 - Recognize state codes (SP, RJ) and full names (São Paulo, Rio de Janeiro, Minas Gerais)
 - Extract limits from "top 10", "best 5", etc.
 
-Always choose the most specific tool for the user's query."""),
-                ("human", "{input}"),
-            ])
+Always choose the most specific tool for the user's query."""
+                        + AGENT_SAFETY_CLAUSE,
+                    ),
+                    ("human", "{input}"),
+                ]
+            )
 
             agent = create_tool_calling_agent(self.llm_client, tools, prompt)
             self.agent_executor = AgentExecutor(
-                agent=agent,
-                tools=tools,
-                verbose=False,
-                handle_parsing_errors=True
+                agent=agent, tools=tools, verbose=False, handle_parsing_errors=True
             )
 
             logger.info("Data Query Agent LangChain executor initialized")
@@ -1116,15 +1239,15 @@ Always choose the most specific tool for the user's query."""),
             response += f"- **Total Orders**: {total:,}\n\n"
             response += "### Sample Orders\n\n"
 
-            if 'order_id' in sample.columns:
+            if "order_id" in sample.columns:
                 # Create markdown table with friendly column names
                 response += f"| {self._friendly_column_name('order_id')} | {self._friendly_column_name('customer_id')} | {self._friendly_column_name('order_purchase_timestamp')} |\n"
                 response += "|---|---|---|\n"
 
                 for _, row in sample.iterrows():
-                    order_id = str(row.get('order_id', 'N/A'))[:16] + '...'
-                    customer_id = str(row.get('customer_id', 'N/A'))[:16] + '...'
-                    purchase_date = str(row.get('order_purchase_timestamp', 'N/A'))
+                    order_id = str(row.get("order_id", "N/A"))[:16] + "..."
+                    customer_id = str(row.get("customer_id", "N/A"))[:16] + "..."
+                    purchase_date = str(row.get("order_purchase_timestamp", "N/A"))
                     response += f"| {order_id} | {customer_id} | {purchase_date} |\n"
             else:
                 response += "*Columns not found*\n"
@@ -1137,7 +1260,11 @@ Always choose the most specific tool for the user's query."""),
         """Query customers data"""
         try:
             total = len(self.data.customers)
-            states = self.data.customers['customer_state'].value_counts().head(5) if 'customer_state' in self.data.customers.columns else None
+            states = (
+                self.data.customers["customer_state"].value_counts().head(5)
+                if "customer_state" in self.data.customers.columns
+                else None
+            )
 
             response = f"## Customer Data\n\n"
             response += f"- **Total Customers**: {total:,}\n\n"
@@ -1164,16 +1291,19 @@ Always choose the most specific tool for the user's query."""),
             response += f"- **Total Products**: {total:,}\n\n"
             response += "### Sample Products\n\n"
 
-            if 'product_id' in sample.columns and 'product_category_name' in sample.columns:
+            if (
+                "product_id" in sample.columns
+                and "product_category_name" in sample.columns
+            ):
                 response += f"| {self._friendly_column_name('product_id')} | {self._friendly_column_name('product_category_name')} |\n"
                 response += "|---|---|\n"
                 for _, row in sample.iterrows():
-                    product_id = str(row.get('product_id', 'N/A'))[:24] + '...'
-                    category = row.get('product_category_name', 'Unknown')
+                    product_id = str(row.get("product_id", "N/A"))[:24] + "..."
+                    category = row.get("product_category_name", "Unknown")
                     if pd.notna(category):
                         category = str(category)[:30]
                     else:
-                        category = 'Unknown'
+                        category = "Unknown"
                     response += f"| {product_id} | {category} |\n"
             else:
                 response += "*Product columns not found*\n"
@@ -1203,10 +1333,16 @@ Always choose the most specific tool for the user's query."""),
         """Process data query"""
         try:
             # Determine if should use RAG based on classification
-            should_use_rag = classification.get('use_rag', True) if classification else True
-            should_use_database = classification.get('use_database', True) if classification else True
+            should_use_rag = (
+                classification.get("use_rag", True) if classification else True
+            )
+            should_use_database = (
+                classification.get("use_database", True) if classification else True
+            )
 
-            logger.info(f"Data Query Agent - Use RAG: {should_use_rag} | Use Database: {should_use_database}")
+            logger.info(
+                f"Data Query Agent - Use RAG: {should_use_rag} | Use Database: {should_use_database}"
+            )
 
             # Try RAG context retrieval if classification allows it
             rag_context = None
@@ -1239,12 +1375,13 @@ Always choose the most specific tool for the user's query."""),
                 charts_b64 = self._pending_charts
 
                 return {
-                    'response': response['output'],
-                    'chart_base64': chart_b64,
-                    'charts_base64': charts_b64,
-                    'agent': 'Data Query Agent (LangChain)' + (' + RAG' if used_rag else ''),
-                    'success': True,
-                    'used_rag': used_rag
+                    "response": response["output"],
+                    "chart_base64": chart_b64,
+                    "charts_base64": charts_b64,
+                    "agent": "Data Query Agent (LangChain)"
+                    + (" + RAG" if used_rag else ""),
+                    "success": True,
+                    "used_rag": used_rag,
                 }
 
             # Fallback to rule-based
@@ -1257,56 +1394,139 @@ Always choose the most specific tool for the user's query."""),
 
                 # Data query agent typically doesn't handle policy questions
                 # But respect classification if provided
-                if classification and classification.get('query_type') == 'policy':
+                if classification and classification.get("query_type") == "policy":
                     if used_rag and rag_context and len(rag_context.strip()) > 20:
-                        response = UIFormatter.synthesize_rag_response(user_query, rag_context, self.llm_client)
+                        response = UIFormatter.synthesize_rag_response(
+                            user_query, rag_context, self.llm_client
+                        )
 
                         return {
-                            'response': response,
-                            'chart_base64': None,
-                            'charts_base64': None,
-                            'agent': 'Data Query Agent (Rule-Based) + RAG',
-                            'success': True,
-                            'used_rag': True,
-                            'classification': classification
+                            "response": response,
+                            "chart_base64": None,
+                            "charts_base64": None,
+                            "agent": "Data Query Agent (Rule-Based) + RAG",
+                            "success": True,
+                            "used_rag": True,
+                            "classification": classification,
                         }
                     else:
                         # RAG failed or no sufficient context - don't fall through to database queries
                         return {
-                            'response': "This appears to be a conceptual/policy question, but I couldn't find relevant information in the uploaded documents. Please ensure you've uploaded the necessary policy documents, or try rephrasing your question.",
-                            'chart_base64': None,
-                            'charts_base64': None,
-                            'agent': 'Data Query Agent (Rule-Based)',
-                            'success': False,
-                            'used_rag': False,
-                            'classification': classification
+                            "response": "This appears to be a conceptual/policy question, but I couldn't find relevant information in the uploaded documents. Please ensure you've uploaded the necessary policy documents, or try rephrasing your question.",
+                            "chart_base64": None,
+                            "charts_base64": None,
+                            "agent": "Data Query Agent (Rule-Based)",
+                            "success": False,
+                            "used_rag": False,
+                            "classification": classification,
                         }
 
                 # Route to appropriate tool based on keywords
-                if any(kw in query_lower for kw in ['find order', 'order id', 'lookup order', 'order details']):
+                if any(
+                    kw in query_lower
+                    for kw in [
+                        "find order",
+                        "order id",
+                        "lookup order",
+                        "order details",
+                    ]
+                ):
                     response = self._find_order_by_id(user_query)
-                elif any(kw in query_lower for kw in ['top products', 'best selling', 'most sold', 'top items']):
+                elif any(
+                    kw in query_lower
+                    for kw in ["top products", "best selling", "most sold", "top items"]
+                ):
                     response = self._get_top_products(user_query)
-                elif any(kw in query_lower for kw in ['top categories', 'category breakdown', 'best categories']):
+                elif any(
+                    kw in query_lower
+                    for kw in [
+                        "top categories",
+                        "category breakdown",
+                        "best categories",
+                    ]
+                ):
                     response = self._get_top_categories(user_query)
-                elif any(kw in query_lower for kw in ['list categories', 'unique categories', 'all categories', 'list unique', 'show all categories', 'list product categories']):
+                elif any(
+                    kw in query_lower
+                    for kw in [
+                        "list categories",
+                        "unique categories",
+                        "all categories",
+                        "list unique",
+                        "show all categories",
+                        "list product categories",
+                    ]
+                ):
                     response = self._list_unique_categories(user_query)
-                elif any(kw in query_lower for kw in ['orders in', 'orders from', 'orders between', 'between', 'date range', 'q1', 'q2', 'q3', 'q4', 'quarter']):
+                elif any(
+                    kw in query_lower
+                    for kw in [
+                        "orders in",
+                        "orders from",
+                        "orders between",
+                        "between",
+                        "date range",
+                        "q1",
+                        "q2",
+                        "q3",
+                        "q4",
+                        "quarter",
+                    ]
+                ):
                     response = self._filter_orders_by_date_range(user_query)
-                elif any(kw in query_lower for kw in ['customers in', 'customer state', 'state distribution', 'by state', 'state breakdown']):
+                elif any(
+                    kw in query_lower
+                    for kw in [
+                        "customers in",
+                        "customer state",
+                        "state distribution",
+                        "by state",
+                        "state breakdown",
+                    ]
+                ):
                     response = self._get_customers_by_state(user_query)
-                elif any(kw in query_lower for kw in ['order status', 'status breakdown', 'delivery status', 'status distribution', 'how many delayed', 'delayed orders']):
+                elif any(
+                    kw in query_lower
+                    for kw in [
+                        "order status",
+                        "status breakdown",
+                        "delivery status",
+                        "status distribution",
+                        "how many delayed",
+                        "delayed orders",
+                    ]
+                ):
                     response = self._get_order_status_breakdown(user_query)
-                elif any(kw in query_lower for kw in ['monthly trend', 'orders by month', 'monthly order', 'order trend', 'monthly pattern', 'monthly analysis', 'trends over time']):
+                elif any(
+                    kw in query_lower
+                    for kw in [
+                        "monthly trend",
+                        "orders by month",
+                        "monthly order",
+                        "order trend",
+                        "monthly pattern",
+                        "monthly analysis",
+                        "trends over time",
+                    ]
+                ):
                     response = self._get_monthly_order_trends(user_query)
-                elif any(kw in query_lower for kw in ['customer history', 'orders for customer', 'customer orders', 'purchase history', 'customer purchase']):
+                elif any(
+                    kw in query_lower
+                    for kw in [
+                        "customer history",
+                        "orders for customer",
+                        "customer orders",
+                        "purchase history",
+                        "customer purchase",
+                    ]
+                ):
                     response = self._get_customer_order_history(user_query)
                 # Fall back to original simple queries
-                elif 'order' in query_lower:
+                elif "order" in query_lower:
                     response = self._query_orders()
-                elif 'customer' in query_lower:
+                elif "customer" in query_lower:
                     response = self._query_customers()
-                elif 'product' in query_lower:
+                elif "product" in query_lower:
                     response = self._query_products()
                 else:
                     response = self._get_data_summary()
@@ -1316,28 +1536,35 @@ Always choose the most specific tool for the user's query."""),
                 charts_b64 = self._pending_charts
 
                 # Append RAG context only if classification allows it (mixed queries)
-                if used_rag and should_use_rag and rag_context and len(rag_context.strip()) > 20 and "no relevant" not in rag_context.lower():
+                if (
+                    used_rag
+                    and should_use_rag
+                    and rag_context
+                    and len(rag_context.strip()) > 20
+                    and "no relevant" not in rag_context.lower()
+                ):
                     # Only append if this is a mixed query (both RAG and database)
-                    if classification and classification.get('query_type') == 'mixed':
+                    if classification and classification.get("query_type") == "mixed":
                         # Use UIFormatter for better RAG context formatting
                         formatted_rag = UIFormatter.format_rag_context(rag_context)
                         response += f"\n\n{formatted_rag}"
 
                 return {
-                    'response': response,
-                    'chart_base64': chart_b64,
-                    'charts_base64': charts_b64,
-                    'agent': 'Data Query Agent (Rule-Based)' + (' + RAG' if used_rag else ''),
-                    'success': True,
-                    'used_rag': used_rag,
-                    'classification': classification
+                    "response": response,
+                    "chart_base64": chart_b64,
+                    "charts_base64": charts_b64,
+                    "agent": "Data Query Agent (Rule-Based)"
+                    + (" + RAG" if used_rag else ""),
+                    "success": True,
+                    "used_rag": used_rag,
+                    "classification": classification,
                 }
 
         except Exception as e:
             logger.error(f"Data Query Agent error: {e}")
             return {
-                'response': f"Error processing data query: {e}",
-                'agent': 'Data Query Agent',
-                'success': False,
-                'used_rag': False
+                "response": f"Error processing data query: {e}",
+                "agent": "Data Query Agent",
+                "success": False,
+                "used_rag": False,
             }

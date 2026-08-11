@@ -42,11 +42,11 @@ class PostgreSQLConnector(DatabaseConnector):
 
     def __init__(self, host: str, port: int, database: str, user: str, password: str):
         config = {
-            'host': host,
-            'port': port,
-            'database': database,
-            'user': user,
-            'password': password
+            "host": host,
+            "port": port,
+            "database": database,
+            "user": user,
+            "password": password,
         }
         super().__init__(config)
         self.engine = None
@@ -68,7 +68,9 @@ class PostgreSQLConnector(DatabaseConnector):
             return True
 
         except ImportError:
-            logger.error("PostgreSQL dependencies not installed. Run: pip install psycopg2-binary sqlalchemy")
+            logger.error(
+                "PostgreSQL dependencies not installed. Run: pip install psycopg2-binary sqlalchemy"
+            )
             return False
         except Exception as e:
             logger.error(f"Failed to connect to PostgreSQL: {e}")
@@ -116,7 +118,7 @@ class PostgreSQLConnector(DatabaseConnector):
         WHERE table_schema='public'
         """
         df = self.execute_query(query)
-        return df['table_name'].tolist() if not df.empty else []
+        return df["table_name"].tolist() if not df.empty else []
 
     def get_realtime_orders(self, last_n_hours: int = 24) -> pd.DataFrame:
         """Get recent orders for real-time analytics"""
@@ -131,8 +133,15 @@ class PostgreSQLConnector(DatabaseConnector):
 class MongoDBConnector:
     """MongoDB connector for NoSQL data"""
 
-    def __init__(self, host: str, port: int, database: str, collection: str,
-                 username: Optional[str] = None, password: Optional[str] = None):
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        database: str,
+        collection: str,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+    ):
         self.host = host
         self.port = port
         self.database = database
@@ -160,7 +169,9 @@ class MongoDBConnector:
             self.collection = self.db[self.collection_name]
             self.connected = True
 
-            logger.info(f"✅ Connected to MongoDB: {self.database}.{self.collection_name}")
+            logger.info(
+                f"✅ Connected to MongoDB: {self.database}.{self.collection_name}"
+            )
             return True
 
         except ImportError:
@@ -224,11 +235,11 @@ class MySQLConnector(DatabaseConnector):
 
     def __init__(self, host: str, port: int, database: str, user: str, password: str):
         config = {
-            'host': host,
-            'port': port,
-            'database': database,
-            'user': user,
-            'password': password
+            "host": host,
+            "port": port,
+            "database": database,
+            "user": user,
+            "password": password,
         }
         super().__init__(config)
         self.engine = None
@@ -250,7 +261,9 @@ class MySQLConnector(DatabaseConnector):
             return True
 
         except ImportError:
-            logger.error("MySQL dependencies not installed. Run: pip install pymysql sqlalchemy")
+            logger.error(
+                "MySQL dependencies not installed. Run: pip install pymysql sqlalchemy"
+            )
             return False
         except Exception as e:
             logger.error(f"Failed to connect to MySQL: {e}")
@@ -315,7 +328,9 @@ class DataPipeline:
                 results[name] = False
         return results
 
-    def sync_data(self, source: str, query: str, target_table: str = None) -> pd.DataFrame:
+    def sync_data(
+        self, source: str, query: str, target_table: str = None
+    ) -> pd.DataFrame:
         """
         Sync data from source to local storage
 
@@ -359,15 +374,17 @@ class DataPipeline:
     def get_status(self) -> Dict[str, Any]:
         """Get pipeline status"""
         status = {
-            'total_connectors': len(self.connectors),
-            'connectors': {},
-            'last_sync': self.last_sync
+            "total_connectors": len(self.connectors),
+            "connectors": {},
+            "last_sync": self.last_sync,
         }
 
         for name, connector in self.connectors.items():
-            status['connectors'][name] = {
-                'connected': connector.connected if hasattr(connector, 'connected') else False,
-                'type': connector.__class__.__name__
+            status["connectors"][name] = {
+                "connected": (
+                    connector.connected if hasattr(connector, "connected") else False
+                ),
+                "type": connector.__class__.__name__,
             }
 
         return status

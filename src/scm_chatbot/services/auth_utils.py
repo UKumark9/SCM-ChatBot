@@ -9,23 +9,23 @@ import hashlib
 _SECRET = "scm-chatbot-demo-2026"
 
 USERS = {
-    "admin":   {"password": "admin123",   "role": "admin",   "display": "Administrator"},
+    "admin": {"password": "admin123", "role": "admin", "display": "Administrator"},
     "analyst": {"password": "analyst123", "role": "analyst", "display": "Data Analyst"},
 }
 
 ROLE_PERMISSIONS = {
     "admin": {
-        "tabs":             ["chat", "docs", "stats", "perf"],
-        "can_upload":       True,
-        "can_delete":       True,
-        "can_rebuild":      True,
+        "tabs": ["chat", "docs", "stats", "perf"],
+        "can_upload": True,
+        "can_delete": True,
+        "can_rebuild": True,
         "docs_tab_visible": True,
     },
     "analyst": {
-        "tabs":             ["chat", "stats", "perf"],
-        "can_upload":       False,
-        "can_delete":       False,
-        "can_rebuild":      False,
+        "tabs": ["chat", "stats", "perf"],
+        "can_upload": False,
+        "can_delete": False,
+        "can_rebuild": False,
         "docs_tab_visible": False,
     },
 }
@@ -51,6 +51,7 @@ def get_permissions(role: str) -> dict:
 
 
 # ── HMAC token (stateless, no shared DB needed) ──────────────────────────────
+
 
 def sign_user(username: str, role: str) -> str:
     """Create a short HMAC signature for username+role."""

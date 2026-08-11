@@ -20,7 +20,9 @@ class FeatureStore:
     Supports both file-based and Redis-based storage
     """
 
-    def __init__(self, storage_path: str = "data/feature_store", use_redis: bool = False):
+    def __init__(
+        self, storage_path: str = "data/feature_store", use_redis: bool = False
+    ):
         """
         Initialize Feature Store
 
@@ -37,11 +39,9 @@ class FeatureStore:
         if use_redis:
             try:
                 import redis
+
                 self.redis_client = redis.Redis(
-                    host='localhost',
-                    port=6379,
-                    db=0,
-                    decode_responses=False
+                    host="localhost", port=6379, db=0, decode_responses=False
                 )
                 self.redis_client.ping()
                 logger.info("✅ Feature Store initialized with Redis")
@@ -83,13 +83,13 @@ class FeatureStore:
             else:
                 # Store in file with metadata
                 data = {
-                    'value': value,
-                    'timestamp': datetime.now().isoformat(),
-                    'ttl': ttl,
-                    'expires_at': (datetime.now() + timedelta(seconds=ttl)).isoformat()
+                    "value": value,
+                    "timestamp": datetime.now().isoformat(),
+                    "ttl": ttl,
+                    "expires_at": (datetime.now() + timedelta(seconds=ttl)).isoformat(),
                 }
                 file_path = self._get_file_path(key)
-                with open(file_path, 'wb') as f:
+                with open(file_path, "wb") as f:
                     pickle.dump(data, f)
 
             logger.debug(f"Stored feature: {key}")
@@ -125,17 +125,17 @@ class FeatureStore:
                 if not file_path.exists():
                     return None
 
-                with open(file_path, 'rb') as f:
+                with open(file_path, "rb") as f:
                     data = pickle.load(f)
 
                 # Check if expired
-                expires_at = datetime.fromisoformat(data['expires_at'])
+                expires_at = datetime.fromisoformat(data["expires_at"])
                 if datetime.now() > expires_at:
                     # Expired, delete file
                     file_path.unlink()
                     return None
 
-                return data['value']
+                return data["value"]
 
         except Exception as e:
             logger.error(f"Error retrieving feature {key}: {e}")
@@ -155,7 +155,9 @@ class FeatureStore:
             if self.set(feature_type, identifier, value, ttl):
                 success_count += 1
 
-        logger.info(f"Batch stored {success_count}/{len(features)} features of type {feature_type}")
+        logger.info(
+            f"Batch stored {success_count}/{len(features)} features of type {feature_type}"
+        )
         return success_count
 
     def batch_get(self, feature_type: str, identifiers: List[str]) -> Dict[str, Any]:
@@ -175,7 +177,9 @@ class FeatureStore:
             if value is not None:
                 results[identifier] = value
 
-        logger.debug(f"Batch retrieved {len(results)}/{len(identifiers)} features of type {feature_type}")
+        logger.debug(
+            f"Batch retrieved {len(results)}/{len(identifiers)} features of type {feature_type}"
+        )
         return results
 
     def delete(self, feature_type: str, identifier: str) -> bool:
@@ -220,7 +224,7 @@ class FeatureStore:
                 # Delete all files (expensive, but works)
                 for file_path in self.storage_path.glob("*.pkl"):
                     try:
-                        with open(file_path, 'rb') as f:
+                        with open(file_path, "rb") as f:
                             data = pickle.load(f)
                         # Check if this is the right type (would need to store type in metadata)
                         file_path.unlink()
@@ -261,23 +265,27 @@ class FeatureStore:
     def get_stats(self) -> Dict[str, Any]:
         """Get feature store statistics"""
         stats = {
-            'backend': 'redis' if self.use_redis else 'file',
-            'storage_path': str(self.storage_path) if not self.use_redis else 'N/A',
-            'total_features': 0
+            "backend": "redis" if self.use_redis else "file",
+            "storage_path": str(self.storage_path) if not self.use_redis else "N/A",
+            "total_features": 0,
         }
 
         try:
             if self.use_redis and self.redis_client:
                 keys = self.redis_client.keys("feature:*")
-                stats['total_features'] = len(keys)
-                stats['redis_info'] = {
-                    'used_memory': self.redis_client.info('memory').get('used_memory_human', 'N/A')
+                stats["total_features"] = len(keys)
+                stats["redis_info"] = {
+                    "used_memory": self.redis_client.info("memory").get(
+                        "used_memory_human", "N/A"
+                    )
                 }
             else:
-                stats['total_features'] = len(list(self.storage_path.glob("*.pkl")))
+                stats["total_features"] = len(list(self.storage_path.glob("*.pkl")))
                 # Calculate storage size
-                total_size = sum(f.stat().st_size for f in self.storage_path.glob("*.pkl"))
-                stats['storage_size_mb'] = round(total_size / (1024 * 1024), 2)
+                total_size = sum(
+                    f.stat().st_size for f in self.storage_path.glob("*.pkl")
+                )
+                stats["storage_size_mb"] = round(total_size / (1024 * 1024), 2)
 
         except Exception as e:
             logger.error(f"Error getting stats: {e}")
@@ -294,35 +302,37 @@ class MLFeatures:
 
     def cache_customer_segment(self, customer_id: str, segment: str, ttl: int = 86400):
         """Cache customer segment (24h TTL by default)"""
-        return self.store.set('customer_segment', customer_id, segment, ttl)
+        return self.store.set("customer_segment", customer_id, segment, ttl)
 
     def get_customer_segment(self, customer_id: str) -> Optional[str]:
         """Get cached customer segment"""
-        return self.store.get('customer_segment', customer_id)
+        return self.store.get("customer_segment", customer_id)
 
-    def cache_product_category(self, product_id: str, category: Dict, ttl: int = 604800):
+    def cache_product_category(
+        self, product_id: str, category: Dict, ttl: int = 604800
+    ):
         """Cache product category (7 days TTL by default)"""
-        return self.store.set('product_category', product_id, category, ttl)
+        return self.store.set("product_category", product_id, category, ttl)
 
     def get_product_category(self, product_id: str) -> Optional[Dict]:
         """Get cached product category"""
-        return self.store.get('product_category', product_id)
+        return self.store.get("product_category", product_id)
 
     def cache_forecast(self, forecast_key: str, forecast_data: Dict, ttl: int = 3600):
         """Cache forecast results (1 hour TTL by default)"""
-        return self.store.set('forecast', forecast_key, forecast_data, ttl)
+        return self.store.set("forecast", forecast_key, forecast_data, ttl)
 
     def get_forecast(self, forecast_key: str) -> Optional[Dict]:
         """Get cached forecast"""
-        return self.store.get('forecast', forecast_key)
+        return self.store.get("forecast", forecast_key)
 
     def cache_analytics(self, analytics_type: str, result: Any, ttl: int = 1800):
         """Cache analytics results (30 min TTL by default)"""
-        return self.store.set('analytics', analytics_type, result, ttl)
+        return self.store.set("analytics", analytics_type, result, ttl)
 
     def get_analytics(self, analytics_type: str) -> Optional[Any]:
         """Get cached analytics"""
-        return self.store.get('analytics', analytics_type)
+        return self.store.get("analytics", analytics_type)
 
 
 # Example usage
@@ -335,7 +345,9 @@ if __name__ == "__main__":
 
     # Cache some features
     ml.cache_customer_segment("CUST001", "high_value")
-    ml.cache_product_category("PROD001", {"category": "electronics", "subcategory": "phones"})
+    ml.cache_product_category(
+        "PROD001", {"category": "electronics", "subcategory": "phones"}
+    )
     ml.cache_forecast("demand_30d", {"forecast": [100, 105, 110], "confidence": 0.85})
 
     # Retrieve features

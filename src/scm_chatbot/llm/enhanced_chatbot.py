@@ -5,10 +5,19 @@ Provides intelligent responses using semantic search and natural language unders
 
 import os
 import logging
-from typing import Dict, List, Optional, Any
+from typing import Dict, Any
 import json
 import pandas as pd
 import numpy as np
+
+from scm_chatbot.llm.llm_client import LLMClient, GroqClient
+from scm_chatbot.llm.guardrails import (
+    SAFETY_CLAUSE,
+    REFUSAL_MESSAGE,
+    detect_injection,
+    wrap_user_query,
+    wrap_context,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +39,10 @@ def convert_to_serializable(obj: Any) -> Any:
     else:
         return obj
 
+
 try:
-    from groq import Groq
+    import groq  # noqa: F401 - availability probe; GroqClient does the real import
+
     GROQ_AVAILABLE = True
 except ImportError:
     GROQ_AVAILABLE = False
@@ -41,7 +52,8 @@ except ImportError:
 class PromptTemplates:
     """Comprehensive prompt templates for SCM queries"""
 
-    SYSTEM_PROMPT = """You are an expert Supply Chain Management (SCM) analyst assistant.
+    SYSTEM_PROMPT = (
+        """You are an expert Supply Chain Management (SCM) analyst assistant.
 You provide accurate, data-driven insights about supply chain operations.
 
 IMPORTANT - Response Detail Level:
@@ -62,7 +74,8 @@ Answer: "Delivery Performance:
 Question: "What insights can you provide about delivery delays?"
 Answer: [Full analysis with insights, trends, recommendations]
 
-Match your response length and detail to the question's complexity."""
+Match your response length and detail to the question's complexity.""" + SAFETY_CLAUSE
+    )
 
     QUERY_ANALYSIS_PROMPT = """Analyze this supply chain query and extract:
 1. Query Type (delivery, revenue, product, customer, forecast, supplier, comprehensive)
@@ -82,6 +95,9 @@ Provide analysis in JSON format:
     "filters": {{}}
 }}"""
 
+    # Line below exceeds the usual 127-char limit intentionally: it's literal
+    # LLM prompt text, and wrapping it would inject a newline into the
+    # instruction sent to the model rather than just reformatting code.
     ANSWER_WITH_CONTEXT = """Based on the supply chain data below, answer the user's question.
 
 {context_section}
@@ -135,7 +151,13 @@ Provide a natural, conversational response that:
 class EnhancedSCMChatbot:
     """Enhanced SCM Chatbot with RAG and LLM capabilities"""
 
-    def __init__(self, analytics_engine, rag_module=None, use_llm: bool = True):
+    def __init__(
+        self,
+        analytics_engine,
+        rag_module=None,
+        use_llm: bool = True,
+        llm_client: LLMClient = None,
+    ):
         """
         Initialize enhanced chatbot
 
@@ -143,77 +165,104 @@ class EnhancedSCMChatbot:
             analytics_engine: SCMAnalytics instance
             rag_module: RAGModule instance (optional)
             use_llm: Whether to use LLM for responses
+            llm_client: Optional pre-built LLMClient (e.g. for tests/mocking).
+                        If not provided, a GroqClient is built from GROQ_API_KEY.
         """
         self.analytics = analytics_engine
         self.rag = rag_module
-        self.use_llm = use_llm and GROQ_AVAILABLE
+        self.use_llm = use_llm and (GROQ_AVAILABLE or llm_client is not None)
         self.conversation_history = []
         self.templates = PromptTemplates()
+        self.llm_client: LLMClient = None
 
-        # Initialize Groq client if available
-        if self.use_llm:
-            api_key = os.getenv('GROQ_API_KEY')
+        if not self.use_llm:
+            logger.info("Using rule-based responses (LLM disabled)")
+        elif llm_client is not None:
+            self.llm_client = llm_client
+            logger.info("LLM integration enabled with injected LLMClient")
+        else:
+            api_key = os.getenv("GROQ_API_KEY")
             if api_key:
-                self.llm_client = Groq(api_key=api_key)
+                self.llm_client = GroqClient(api_key=api_key)
                 logger.info("LLM integration enabled with Groq")
             else:
                 self.use_llm = False
                 logger.warning("GROQ_API_KEY not found, LLM features disabled")
-        else:
-            self.llm_client = None
-            logger.info("Using rule-based responses (LLM disabled)")
 
     def analyze_query_intent(self, query: str) -> Dict:
         """Analyze query to determine intent and required analytics"""
         query_lower = query.lower()
 
         intent = {
-            'type': 'general',
-            'requires_analytics': [],
-            'geographic': None,
-            'time_based': False,
-            'comparison': False
+            "type": "general",
+            "requires_analytics": [],
+            "geographic": None,
+            "time_based": False,
+            "comparison": False,
         }
 
         # Determine query type and required analytics
-        if any(word in query_lower for word in ['delay', 'delayed', 'late', 'on-time', 'on time', 'delivery']):
-            intent['type'] = 'delivery'
-            intent['requires_analytics'].append('delivery_delays')
+        if any(
+            word in query_lower
+            for word in ["delay", "delayed", "late", "on-time", "on time", "delivery"]
+        ):
+            intent["type"] = "delivery"
+            intent["requires_analytics"].append("delivery_delays")
 
-        if any(word in query_lower for word in ['revenue', 'sales', 'income', 'earnings', 'profit']):
-            intent['type'] = 'revenue'
-            intent['requires_analytics'].append('revenue_trends')
+        if any(
+            word in query_lower
+            for word in ["revenue", "sales", "income", "earnings", "profit"]
+        ):
+            intent["type"] = "revenue"
+            intent["requires_analytics"].append("revenue_trends")
 
-        if any(word in query_lower for word in ['product', 'item', 'category', 'inventory']):
-            intent['type'] = 'product'
-            intent['requires_analytics'].append('product_performance')
+        if any(
+            word in query_lower for word in ["product", "item", "category", "inventory"]
+        ):
+            intent["type"] = "product"
+            intent["requires_analytics"].append("product_performance")
 
-        if any(word in query_lower for word in ['customer', 'buyer', 'client']):
-            intent['type'] = 'customer'
-            intent['requires_analytics'].append('customer_behavior')
+        if any(word in query_lower for word in ["customer", "buyer", "client"]):
+            intent["type"] = "customer"
+            intent["requires_analytics"].append("customer_behavior")
 
-        if any(word in query_lower for word in ['forecast', 'predict', 'future', 'trend', 'projection']):
-            intent['type'] = 'forecast'
-            intent['requires_analytics'].append('demand_forecast')
+        if any(
+            word in query_lower
+            for word in ["forecast", "predict", "future", "trend", "projection"]
+        ):
+            intent["type"] = "forecast"
+            intent["requires_analytics"].append("demand_forecast")
 
-        if any(word in query_lower for word in ['comprehensive', 'report', 'overview', 'summary', 'all']):
-            intent['type'] = 'comprehensive'
-            intent['requires_analytics'].append('comprehensive_report')
+        if any(
+            word in query_lower
+            for word in ["comprehensive", "report", "overview", "summary", "all"]
+        ):
+            intent["type"] = "comprehensive"
+            intent["requires_analytics"].append("comprehensive_report")
 
         # Check for geographic focus
-        if any(word in query_lower for word in ['state', 'region', 'location', 'where', 'which state']):
-            intent['geographic'] = True
+        if any(
+            word in query_lower
+            for word in ["state", "region", "location", "where", "which state"]
+        ):
+            intent["geographic"] = True
 
         # Check for time-based queries
-        if any(word in query_lower for word in ['month', 'year', 'trend', 'over time', 'growth']):
-            intent['time_based'] = True
+        if any(
+            word in query_lower
+            for word in ["month", "year", "trend", "over time", "growth"]
+        ):
+            intent["time_based"] = True
 
         # Check for comparisons
-        if any(word in query_lower for word in ['compare', 'versus', 'vs', 'difference', 'better', 'worse']):
-            intent['comparison'] = True
+        if any(
+            word in query_lower
+            for word in ["compare", "versus", "vs", "difference", "better", "worse"]
+        ):
+            intent["comparison"] = True
 
         # Determine question complexity level
-        intent['complexity'] = self._detect_complexity(query_lower)
+        intent["complexity"] = self._detect_complexity(query_lower)
 
         return intent
 
@@ -222,63 +271,84 @@ class EnhancedSCMChatbot:
 
         # SIMPLE: Direct "what is" questions asking for single metric
         simple_patterns = [
-            'what is the',
-            'what is',
-            'what\'s the',
-            'how many',
-            'how much',
-            'give me the',
-            'tell me the'
+            "what is the",
+            "what is",
+            "what's the",
+            "how many",
+            "how much",
+            "give me the",
+            "tell me the",
         ]
 
         # Check if it's a simple question (single metric request)
         if any(pattern in query_lower for pattern in simple_patterns):
             # And doesn't ask for analysis/insights
-            if not any(word in query_lower for word in ['why', 'how', 'insight', 'recommend', 'explain', 'analyze', 'compare']):
+            if not any(
+                word in query_lower
+                for word in [
+                    "why",
+                    "how",
+                    "insight",
+                    "recommend",
+                    "explain",
+                    "analyze",
+                    "compare",
+                ]
+            ):
                 # And is short (likely asking for one thing)
                 if len(query_lower.split()) <= 10:
-                    return 'simple'
+                    return "simple"
 
         # COMPLEX: Questions asking for insights, explanations, recommendations
         complex_patterns = [
-            'insight', 'why', 'how can', 'explain', 'recommend',
-            'what should', 'help me understand', 'tell me about',
-            'what are the main', 'what drives', 'root cause'
+            "insight",
+            "why",
+            "how can",
+            "explain",
+            "recommend",
+            "what should",
+            "help me understand",
+            "tell me about",
+            "what are the main",
+            "what drives",
+            "root cause",
         ]
 
         if any(pattern in query_lower for pattern in complex_patterns):
-            return 'complex'
+            return "complex"
 
         # MODERATE: Everything else (show, analyze, list, etc.)
-        return 'moderate'
+        return "moderate"
 
     def _extract_key_metric(self, data: Dict, intent: Dict, query: str) -> Dict:
         """Extract only the key metric for simple questions"""
         query_lower = query.lower()
 
         # For delivery queries
-        if intent['type'] == 'delivery' and 'delivery' in data:
-            if 'delay rate' in query_lower:
-                return {'delay_rate_percentage': data['delivery']['delay_rate_percentage']}
-            elif 'on-time' in query_lower or 'on time' in query_lower:
-                on_time_rate = 100 - data['delivery']['delay_rate_percentage']
-                return {'on_time_rate_percentage': on_time_rate}
+        if intent["type"] == "delivery" and "delivery" in data:
+            if "delay rate" in query_lower:
+                return {
+                    "delay_rate_percentage": data["delivery"]["delay_rate_percentage"]
+                }
+            elif "on-time" in query_lower or "on time" in query_lower:
+                on_time_rate = 100 - data["delivery"]["delay_rate_percentage"]
+                return {"on_time_rate_percentage": on_time_rate}
             else:
                 # Return just the core metrics
                 return {
-                    'delay_rate_percentage': data['delivery']['delay_rate_percentage'],
-                    'total_orders': data['delivery']['total_orders'],
-                    'delayed_orders': data['delivery']['delayed_orders']
+                    "delay_rate_percentage": data["delivery"]["delay_rate_percentage"],
+                    "total_orders": data["delivery"]["total_orders"],
+                    "delayed_orders": data["delivery"]["delayed_orders"],
                 }
 
         # For revenue queries
-        if intent['type'] == 'revenue' and 'revenue' in data:
-            if 'total' in query_lower:
-                return {'total_revenue': data['revenue']['total_revenue']}
+        if intent["type"] == "revenue" and "revenue" in data:
+            if "total" in query_lower:
+                return {"total_revenue": data["revenue"]["total_revenue"]}
             else:
                 return {
-                    'total_revenue': data['revenue']['total_revenue'],
-                    'average_order_value': data['revenue']['average_order_value']
+                    "total_revenue": data["revenue"]["total_revenue"],
+                    "average_order_value": data["revenue"]["average_order_value"],
                 }
 
         # For other types, return simplified data
@@ -289,23 +359,25 @@ class EnhancedSCMChatbot:
         analytics_data = {}
 
         try:
-            if 'delivery_delays' in intent['requires_analytics']:
-                analytics_data['delivery'] = self.analytics.analyze_delivery_delays()
+            if "delivery_delays" in intent["requires_analytics"]:
+                analytics_data["delivery"] = self.analytics.analyze_delivery_delays()
 
-            if 'revenue_trends' in intent['requires_analytics']:
-                analytics_data['revenue'] = self.analytics.analyze_revenue_trends()
+            if "revenue_trends" in intent["requires_analytics"]:
+                analytics_data["revenue"] = self.analytics.analyze_revenue_trends()
 
-            if 'product_performance' in intent['requires_analytics']:
-                analytics_data['product'] = self.analytics.analyze_product_performance()
+            if "product_performance" in intent["requires_analytics"]:
+                analytics_data["product"] = self.analytics.analyze_product_performance()
 
-            if 'customer_behavior' in intent['requires_analytics']:
-                analytics_data['customer'] = self.analytics.analyze_customer_behavior()
+            if "customer_behavior" in intent["requires_analytics"]:
+                analytics_data["customer"] = self.analytics.analyze_customer_behavior()
 
-            if 'demand_forecast' in intent['requires_analytics']:
-                analytics_data['forecast'] = self.analytics.forecast_demand(periods=30)
+            if "demand_forecast" in intent["requires_analytics"]:
+                analytics_data["forecast"] = self.analytics.forecast_demand(periods=30)
 
-            if 'comprehensive_report' in intent['requires_analytics']:
-                analytics_data['comprehensive'] = self.analytics.generate_comprehensive_report()
+            if "comprehensive_report" in intent["requires_analytics"]:
+                analytics_data["comprehensive"] = (
+                    self.analytics.generate_comprehensive_report()
+                )
 
         except Exception as e:
             logger.error(f"Error gathering analytics: {e}")
@@ -324,115 +396,126 @@ class EnhancedSCMChatbot:
             logger.error(f"Error retrieving context: {e}")
             return ""
 
-    def _build_answer_prompt(self, query: str, context: str, analytics_data: Dict, intent: Dict) -> tuple:
+    def _build_answer_prompt(
+        self, query: str, context: str, analytics_data: Dict, intent: Dict
+    ) -> tuple:
         """Build the (system_prompt, user_prompt) pair shared by streaming and non-streaming LLM calls"""
         # Convert analytics data to JSON-serializable format
         serializable_data = convert_to_serializable(analytics_data)
 
         # Get complexity level
-        complexity = intent.get('complexity', 'moderate')
+        complexity = intent.get("complexity", "moderate")
 
         # Simplify analytics data for simple questions (only include relevant parts)
-        if complexity == 'simple':
+        if complexity == "simple":
             # Extract only the key metric being asked about
-            serializable_data = self._extract_key_metric(serializable_data, intent, query)
+            serializable_data = self._extract_key_metric(
+                serializable_data, intent, query
+            )
 
         # Format analytics data for prompt
         analytics_summary = json.dumps(serializable_data, indent=2, default=str)
 
-        # Format RAG context if available
+        # Format RAG context if available (wrapped as untrusted reference data,
+        # not instructions - see scm_chatbot.llm.guardrails)
         context_section = ""
         if context and len(context.strip()) > 0:
             context_section = f"""Policy Documents (from knowledge base):
-{context}
+{wrap_context(context)}
 
 ---
 """
 
         # Add complexity hint to the prompt
         complexity_hint = {
-            'simple': "\n\nIMPORTANT: This is a SIMPLE question. Provide ONLY the direct answer in 1 sentence. Do NOT add explanations, recommendations, or extra details.",
-            'moderate': "\n\nThis is a MODERATE question. Provide a brief answer with 2-4 key metrics.",
-            'complex': "\n\nThis is a COMPLEX question. Provide comprehensive analysis with insights and recommendations."
+            "simple": (
+                "\n\nIMPORTANT: This is a SIMPLE question. Provide ONLY the direct answer "
+                "in 1 sentence. Do NOT add explanations, recommendations, or extra details."
+            ),
+            "moderate": "\n\nThis is a MODERATE question. Provide a brief answer with 2-4 key metrics.",
+            "complex": "\n\nThis is a COMPLEX question. Provide comprehensive analysis with insights and recommendations.",
         }
 
         user_prompt = self.templates.ANSWER_WITH_CONTEXT.format(
             context_section=context_section,
             analytics_data=analytics_summary,
-            query=query
-        ) + complexity_hint.get(complexity, '')
+            query=wrap_user_query(query),
+        ) + complexity_hint.get(complexity, "")
 
         return self.templates.SYSTEM_PROMPT, user_prompt
 
-    def generate_llm_response(self, query: str, context: str, analytics_data: Dict, intent: Dict) -> str:
+    def generate_llm_response(
+        self, query: str, context: str, analytics_data: Dict, intent: Dict
+    ) -> str:
         """Generate response using LLM (single, non-streamed call)"""
         if not self.use_llm or not self.llm_client:
             return None
 
         try:
-            system_prompt, user_prompt = self._build_answer_prompt(query, context, analytics_data, intent)
-
-            response = self.llm_client.chat.completions.create(
-                model="llama-3.3-70b-versatile",  # Current Groq model (updated 2026)
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=0.3,  # Lower temperature for more factual responses
-                max_tokens=1024
+            system_prompt, user_prompt = self._build_answer_prompt(
+                query, context, analytics_data, intent
             )
 
-            return response.choices[0].message.content
+            return self.llm_client.complete(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.3,  # Lower temperature for more factual responses
+                max_tokens=1024,
+            )
 
         except Exception as e:
             logger.error(f"Error generating LLM response: {e}")
             return None
 
-    def generate_llm_response_stream(self, query: str, context: str, analytics_data: Dict, intent: Dict):
+    def generate_llm_response_stream(
+        self, query: str, context: str, analytics_data: Dict, intent: Dict
+    ):
         """Generate response using LLM, yielding text deltas as Groq streams them"""
         if not self.use_llm or not self.llm_client:
             return
 
         try:
-            system_prompt, user_prompt = self._build_answer_prompt(query, context, analytics_data, intent)
+            system_prompt, user_prompt = self._build_answer_prompt(
+                query, context, analytics_data, intent
+            )
 
-            stream = self.llm_client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+            yield from self.llm_client.complete_stream(
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
+                    {"role": "user", "content": user_prompt},
                 ],
                 temperature=0.3,
                 max_tokens=1024,
-                stream=True
             )
-
-            for chunk in stream:
-                delta = chunk.choices[0].delta.content
-                if delta:
-                    yield delta
 
         except Exception as e:
             logger.error(f"Error streaming LLM response: {e}")
 
-    def generate_rule_based_response(self, query: str, intent: Dict, analytics_data: Dict) -> str:
+    def generate_rule_based_response(
+        self, query: str, intent: Dict, analytics_data: Dict
+    ) -> str:
         """Generate response using rule-based system (fallback)"""
         query_lower = query.lower()
 
         # Delivery queries
-        if intent['type'] == 'delivery':
-            delivery_data = analytics_data.get('delivery', {})
+        if intent["type"] == "delivery":
+            delivery_data = analytics_data.get("delivery", {})
             if not delivery_data:
                 return "Delivery data not available."
 
             # Check for state-specific queries
-            if intent.get('geographic'):
-                delays_by_state = delivery_data.get('delays_by_state', {})
+            if intent.get("geographic"):
+                delays_by_state = delivery_data.get("delays_by_state", {})
                 if delays_by_state:
                     state_delays = sorted(
-                        [(state, rate * 100) for state, rate in delays_by_state.items()],
+                        [
+                            (state, rate * 100)
+                            for state, rate in delays_by_state.items()
+                        ],
                         key=lambda x: x[1],
-                        reverse=True
+                        reverse=True,
                     )
 
                     response = "📍 **Delivery Delays by State:**\n\n"
@@ -441,10 +524,10 @@ class EnhancedSCMChatbot:
                     return response
 
             # Check for on-time queries
-            elif 'on-time' in query_lower or 'on time' in query_lower:
-                on_time_rate = 100 - delivery_data.get('delay_rate_percentage', 0)
-                total = delivery_data.get('total_orders', 0)
-                delayed = delivery_data.get('delayed_orders', 0)
+            elif "on-time" in query_lower or "on time" in query_lower:
+                on_time_rate = 100 - delivery_data.get("delay_rate_percentage", 0)
+                total = delivery_data.get("total_orders", 0)
+                delayed = delivery_data.get("delayed_orders", 0)
                 on_time = total - delayed
 
                 return f"""✅ **On-Time Delivery Performance:**
@@ -469,8 +552,8 @@ class EnhancedSCMChatbot:
 - **Median Delay:** {delivery_data.get('median_delay_days', 0):.1f} days"""
 
         # Revenue queries
-        elif intent['type'] == 'revenue':
-            revenue_data = analytics_data.get('revenue', {})
+        elif intent["type"] == "revenue":
+            revenue_data = analytics_data.get("revenue", {})
             if not revenue_data:
                 return "Revenue data not available."
 
@@ -483,8 +566,8 @@ class EnhancedSCMChatbot:
 - **Lowest Revenue Month:** {revenue_data.get('lowest_revenue_month', 'N/A')}"""
 
         # Product queries
-        elif intent['type'] == 'product':
-            product_data = analytics_data.get('product', {})
+        elif intent["type"] == "product":
+            product_data = analytics_data.get("product", {})
             if not product_data:
                 return "Product data not available."
 
@@ -495,8 +578,8 @@ class EnhancedSCMChatbot:
 - **Average Product Price:** ${product_data.get('average_product_price', 0):.2f}"""
 
         # Customer queries
-        elif intent['type'] == 'customer':
-            customer_data = analytics_data.get('customer', {})
+        elif intent["type"] == "customer":
+            customer_data = analytics_data.get("customer", {})
             if not customer_data:
                 return "Customer data not available."
 
@@ -509,8 +592,8 @@ class EnhancedSCMChatbot:
 - **Average Customer Lifetime Value:** ${customer_data.get('average_customer_lifetime_value', 0):.2f}"""
 
         # Forecast queries
-        elif intent['type'] == 'forecast':
-            forecast_data = analytics_data.get('forecast', {})
+        elif intent["type"] == "forecast":
+            forecast_data = analytics_data.get("forecast", {})
             if not forecast_data:
                 return "Forecast data not available."
 
@@ -522,15 +605,15 @@ class EnhancedSCMChatbot:
 - **R² Score:** {forecast_data.get('model_metrics', {}).get('r_squared', 0):.3f}"""
 
         # Comprehensive report
-        elif intent['type'] == 'comprehensive':
-            comp_data = analytics_data.get('comprehensive', {})
+        elif intent["type"] == "comprehensive":
+            comp_data = analytics_data.get("comprehensive", {})
             if not comp_data:
                 return "Unable to generate comprehensive report."
 
-            delivery = comp_data.get('delivery_analysis', {})
-            revenue = comp_data.get('revenue_analysis', {})
-            product = comp_data.get('product_analysis', {})
-            customer = comp_data.get('customer_analysis', {})
+            delivery = comp_data.get("delivery_analysis", {})
+            revenue = comp_data.get("revenue_analysis", {})
+            product = comp_data.get("product_analysis", {})
+            customer = comp_data.get("customer_analysis", {})
 
             return f"""📋 **Comprehensive Supply Chain Report**
 
@@ -585,45 +668,67 @@ I can provide insights on:
 
 What would you like to know?"""
 
-    def _generate_fallback_response(self, user_query: str, intent: Dict, analytics_data: Dict, context: str, show_agent: bool) -> tuple:
+    def _generate_fallback_response(
+        self,
+        user_query: str,
+        intent: Dict,
+        analytics_data: Dict,
+        context: str,
+        show_agent: bool,
+    ) -> tuple:
         """Build a non-streamed answer when the primary LLM path is unavailable or empty"""
         rag_used_fallback = False
-        if context and len(context.strip()) > 20 and 'no relevant' not in context.lower() and self.llm_client:
+        if (
+            context
+            and len(context.strip()) > 20
+            and "no relevant" not in context.lower()
+            and self.llm_client
+        ):
             try:
-                synth = self.llm_client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
+                response_text = self.llm_client.complete(
                     messages=[
-                        {"role": "system", "content": (
-                            "You are a supply chain management expert. Using ONLY the provided document excerpts, "
-                            "give a clear, concise answer to the user's question. "
-                            "Use bullet points and bold key terms for readability. "
-                            "If the documents don't fully answer the question, say what you found and note the gap. "
-                            "Do NOT mention document numbers or relevance scores."
-                        )},
-                        {"role": "user", "content": f"Documents:\n{context}\n\nQuestion: {user_query}"}
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a supply chain management expert. Using ONLY the provided document excerpts, "
+                                "give a clear, concise answer to the user's question. "
+                                "Use bullet points and bold key terms for readability. "
+                                "If the documents don't fully answer the question, say what you found and note the gap. "
+                                "Do NOT mention document numbers or relevance scores."
+                            ),
+                        },
+                        {
+                            "role": "user",
+                            "content": f"Documents:\n{context}\n\nQuestion: {user_query}",
+                        },
                     ],
                     temperature=0.3,
-                    max_tokens=1024
+                    max_tokens=1024,
                 )
-                response_text = synth.choices[0].message.content
                 rag_used_fallback = True
             except Exception as e:
                 logger.warning(f"RAG synthesis failed in rule-based fallback: {e}")
-                response_text = self.generate_rule_based_response(user_query, intent, analytics_data)
+                response_text = self.generate_rule_based_response(
+                    user_query, intent, analytics_data
+                )
         else:
-            response_text = self.generate_rule_based_response(user_query, intent, analytics_data)
+            response_text = self.generate_rule_based_response(
+                user_query, intent, analytics_data
+            )
 
         agent_info = ""
         if show_agent:
             agent_info = self._build_agent_info(
                 agent="Rule-Based Engine" + (" + RAG" if rag_used_fallback else ""),
                 model="Pattern Matching",
-                complexity=intent.get('complexity', 'moderate'),
-                rag_used=rag_used_fallback
+                complexity=intent.get("complexity", "moderate"),
+                rag_used=rag_used_fallback,
             )
         return response_text, agent_info, rag_used_fallback
 
-    def query_stream(self, user_query: str, show_agent: bool = True, use_rag: bool = True):
+    def query_stream(
+        self, user_query: str, show_agent: bool = True, use_rag: bool = True
+    ):
         """
         Process user query, yielding response text incrementally as it becomes
         available. The primary LLM path streams token-by-token (Groq); the
@@ -638,13 +743,22 @@ What would you like to know?"""
         Yields:
             Response text chunks
         """
+        matched_pattern = detect_injection(user_query)
+        if matched_pattern:
+            logger.warning(
+                f"Blocked suspected prompt injection (pattern: {matched_pattern!r})"
+            )
+            yield REFUSAL_MESSAGE
+            return
+
         _metrics_tracker = None
         _query_id = None
         try:
-            from metrics_tracker import get_metrics_tracker
+            from scm_chatbot.services.metrics_tracker import get_metrics_tracker
+
             _metrics_tracker = get_metrics_tracker()
-            _query_id = _metrics_tracker.start_query(user_query, mode='enhanced')
-            _metrics_tracker.add_data_source(_query_id, 'analytics_engine')
+            _query_id = _metrics_tracker.start_query(user_query, mode="enhanced")
+            _metrics_tracker.add_data_source(_query_id, "analytics_engine")
         except Exception:
             pass
 
@@ -656,7 +770,9 @@ What would you like to know?"""
 
             analytics_data = self.gather_analytics_data(intent)
 
-            context = self.retrieve_context(user_query) if (self.rag and use_rag) else ""
+            context = (
+                self.retrieve_context(user_query) if (self.rag and use_rag) else ""
+            )
             if not use_rag:
                 logger.info("RAG disabled for this query (user preference)")
 
@@ -664,15 +780,21 @@ What would you like to know?"""
                 if _metrics_tracker and _query_id:
                     rag_actually_used = bool(context and self.rag and use_rag)
                     if rag_actually_used:
-                        _metrics_tracker.add_data_source(_query_id, 'rag_documents')
-                    _metrics_tracker.add_agent_execution(_query_id, 'enhanced', used_rag=rag_actually_used)
-                    _metrics_tracker.calculate_hallucination_score(_query_id, response_text, ground_truth_data={'analytics': True})
+                        _metrics_tracker.add_data_source(_query_id, "rag_documents")
+                    _metrics_tracker.add_agent_execution(
+                        _query_id, "enhanced", used_rag=rag_actually_used
+                    )
+                    _metrics_tracker.calculate_hallucination_score(
+                        _query_id, response_text, ground_truth_data={"analytics": True}
+                    )
                     _metrics_tracker.end_query(_query_id, success=True)
 
             # Try LLM response first (streamed)
             if self.use_llm:
                 chunks = []
-                for delta in self.generate_llm_response_stream(user_query, context, analytics_data, intent):
+                for delta in self.generate_llm_response_stream(
+                    user_query, context, analytics_data, intent
+                ):
                     chunks.append(delta)
                     yield delta
                 response_text = "".join(chunks)
@@ -682,16 +804,18 @@ What would you like to know?"""
                         yield self._build_agent_info(
                             agent="Enhanced AI (LLM)",
                             model="Llama 3.3 70B",
-                            complexity=intent.get('complexity', 'moderate'),
-                            rag_used=bool(context and self.rag)
+                            complexity=intent.get("complexity", "moderate"),
+                            rag_used=bool(context and self.rag),
                         )
 
-                    self.conversation_history.append({
-                        'query': user_query,
-                        'response': response_text,
-                        'intent': intent,
-                        'agent': 'llm'
-                    })
+                    self.conversation_history.append(
+                        {
+                            "query": user_query,
+                            "response": response_text,
+                            "intent": intent,
+                            "agent": "llm",
+                        }
+                    )
                     _record_metrics(response_text)
                     return
 
@@ -701,23 +825,28 @@ What would you like to know?"""
             )
             yield response_text + agent_info
 
-            self.conversation_history.append({
-                'query': user_query,
-                'response': response_text,
-                'intent': intent,
-                'agent': 'rule-based'
-            })
+            self.conversation_history.append(
+                {
+                    "query": user_query,
+                    "response": response_text,
+                    "intent": intent,
+                    "agent": "rule-based",
+                }
+            )
             _record_metrics(response_text)
 
         except Exception as e:
             logger.error(f"Error processing query: {e}")
             import traceback
+
             traceback.print_exc()
             if _metrics_tracker and _query_id:
                 _metrics_tracker.end_query(_query_id, success=False, error=str(e))
             yield f"❌ Error processing your query: {str(e)}\n\nPlease try rephrasing your question."
 
-    def query(self, user_query: str, show_agent: bool = True, use_rag: bool = True) -> str:
+    def query(
+        self, user_query: str, show_agent: bool = True, use_rag: bool = True
+    ) -> str:
         """
         Process user query and generate response (non-streamed convenience wrapper
         around query_stream, kept for callers that just want the final string).
@@ -725,9 +854,13 @@ What would you like to know?"""
         Returns:
             Response string
         """
-        return "".join(self.query_stream(user_query, show_agent=show_agent, use_rag=use_rag))
+        return "".join(
+            self.query_stream(user_query, show_agent=show_agent, use_rag=use_rag)
+        )
 
-    def _build_agent_info(self, agent: str, model: str, complexity: str, rag_used: bool) -> str:
+    def _build_agent_info(
+        self, agent: str, model: str, complexity: str, rag_used: bool
+    ) -> str:
         """Build agent execution information footer"""
         parts = [agent, model, complexity.title()]
         if rag_used:
@@ -735,7 +868,7 @@ What would you like to know?"""
         body = " | ".join(parts)
         return (
             f'\n\n<p style="font-size:0.75em;font-style:italic;opacity:0.6;margin-top:4px">'
-            f'{body}</p>'
+            f"{body}</p>"
         )
 
     def clear_history(self):
